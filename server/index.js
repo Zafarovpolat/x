@@ -25,7 +25,7 @@ const activeExams = new Map();
 
 // Предопределенные учетные данные (хеш пароля сгенерирован с помощью bcrypt)
 const adminUsername = 'admin';
-const adminPasswordHash = '$2b$10$YOUR_HASH_HERE'; // Замените на хеш вашего пароля (см. ниже как сгенерировать)
+const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC'; // Ваш хеш здесь
 
 wss.on('connection', ws => {
     console.log('Клиент подключился');

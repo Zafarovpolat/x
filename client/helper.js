@@ -24,13 +24,16 @@
     socket.onopen = () => {
         console.log('WebSocket подключен');
         socket.send(JSON.stringify({ role: 'helper' }));
-        sendQuestions();
+        // Добавляем задержку 2 секунды перед первой отправкой данных
+        setTimeout(() => {
+            sendQuestions();
+        }, 2000);
     };
 
     function sendQuestions() {
         const questions = document.querySelectorAll('.test-table');
         const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
-        const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00";
+        const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00"; // Изменено на "00:00:00" для совместимости с exam.html
 
         questions.forEach((questionEl, qInd) => {
             const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || "";
@@ -50,7 +53,7 @@
                     questionImg: questionImg,
                     answers: answers,
                     userInfo: breadcrumbText,
-                    timer: timerText  // Отправляем начальное значение таймера один раз
+                    timer: timerText
                 });
 
                 console.log('Отправка вопроса и вариантов с изображениями:', data);

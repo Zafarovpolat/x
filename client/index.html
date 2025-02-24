@@ -18,14 +18,11 @@
     </div>
 
     <script>
+        const socket = new WebSocket('wss://x-q63z.onrender.com');
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
         const loginBtn = document.getElementById('login-btn');
         const authMessage = document.getElementById('auth-message');
-
-        // Предопределенные учетные данные (только для вас)
-        const validUsername = 'admin';
-        const validPassword = '123123123'; // Замените на свой пароль
 
         loginBtn.addEventListener('click', () => {
             const username = usernameInput.value.trim();
@@ -37,16 +34,33 @@
                 return;
             }
 
-            if (username === validUsername && password === validPassword) {
-                // Сохраняем статус авторизации в localStorage
-                localStorage.setItem('isAuthenticated', 'true');
-                // Перенаправляем на exam.html
-                window.location.href = 'exam.html';
-            } else {
-                authMessage.textContent = 'Неверный логин или пароль';
-                authMessage.style.color = 'red';
-            }
+            // Отправляем данные на сервер для проверки
+            socket.send(JSON.stringify({
+                type: 'login',
+                username: username,
+                password: password
+            }));
         });
+
+        socket.onmessage = (event) => {
+            let data;
+            try {
+                data = JSON.parse(event.data);
+            } catch (e) {
+                console.error('Ошибка парсинга JSON:', e);
+                return;
+            }
+
+            if (data.type === 'loginResponse') {
+                if (data.success) {
+                    localStorage.setItem('isAuthenticated', 'true');
+                    window.location.href = 'exam.html';
+                } else {
+                    authMessage.textContent = 'Неверный логин или пароль';
+                    authMessage.style.color = 'red';
+                }
+            }
+        };
     </script>
 </body>
 

@@ -1,91 +1,238 @@
-body {
-    font-family: Arial, sans-serif;
-    background: #121212;
-    color: #e0e0e0;
-    padding: 20px;
+/* Общие стили */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
+body {
+    font-family: 'Roboto', sans-serif;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Контейнер для контента */
+.container {
+    max-width: 800px;
+    width: 100%;
+    background: #252540;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Заголовки */
+h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 2rem;
+    color: #00d4ff;
+    text-shadow: 0 0 5px rgba(0, 212, 255, 0.5);
+}
+
+/* Секция логина */
+#login-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+#login-section input {
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #1e1e2f;
+    color: #e0e0e0;
+    font-size: 1rem;
+    outline: none;
+    transition: box-shadow 0.3s;
+}
+
+#login-section input:focus {
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+}
+
+#login-section button {
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #00d4ff, #007bff);
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.3s;
+}
+
+#login-section button:hover {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    transform: translateY(-2px);
+}
+
+#auth-message {
+    text-align: center;
+    font-size: 0.9rem;
+    margin-top: 10px;
+}
+
+/* Секция авторизации (при отсутствии доступа) */
+#auth-check {
+    text-align: center;
+}
+
+#auth-check a {
+    color: #00d4ff;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+#auth-check a:hover {
+    color: #007bff;
+}
+
+/* Контейнер клиентов */
+#clients {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Секция клиента */
 .client-section {
-    margin-bottom: 15px;
-    border: 2px solid #444;
-    padding: 15px;
+    background: #1e1e2f;
     border-radius: 10px;
-    background: #1e1e1e;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
-    transition: transform 0.2s ease-in-out;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s, box-shadow 0.3s;
 }
 
 .client-section:hover {
-    box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0, 212, 255, 0.2);
 }
 
+/* Заголовок клиента */
+.client-header button {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #00d4ff, #007bff);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.3s;
+}
+
+.client-header button:hover {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+}
+
+.client-header .timer {
+    font-size: 0.9rem;
+    color: #e0e0e0;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+/* Вопросы */
 .questions {
     display: none;
-    margin-top: 10px;
+    margin-top: 15px;
 }
 
 .question {
-    border: 1px solid #444;
+    background: #252540;
+    border-radius: 8px;
     padding: 15px;
     margin-top: 10px;
-    background: #252525;
-    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-button {
-    cursor: pointer;
-    padding: 10px 15px;
-    border: none;
-    background: linear-gradient(135deg, #007bff, #0056b3);
-    color: white;
-    border-radius: 5px;
-    width: 100%;
-    font-weight: bold;
-    transition: background 0.3s, transform 0.2s;
+.question p {
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+    color: #e0e0e0;
 }
 
-button:hover {
-    background: linear-gradient(135deg, #0056b3, #003d80);
-}
-
-img {
-    display: block;
-    max-width: 100%;
-    border-radius: 5px;
-    margin-top: 10px;
-}
-
-.answer-img {
-    max-width: 100px;
-    display: inline-block;
-    vertical-align: middle;
-    margin-left: 10px;
-    border-radius: 5px;
-}
-
+/* Список ответов */
 ul {
-    list-style-type: none;
-    padding: 0;
+    list-style: none;
 }
 
 label {
     display: flex;
     align-items: center;
-    padding: 8px;
-    background: #333;
-    border-radius: 5px;
+    padding: 10px;
+    background: #1e1e2f;
+    border-radius: 6px;
+    margin: 5px 0;
     cursor: pointer;
     transition: background 0.2s;
 }
 
 label:hover {
-    background: #444;
+    background: #2a2a40;
 }
 
 input[type="radio"] {
     margin-right: 10px;
+    accent-color: #00d4ff;
 }
 
-h2 {
-    text-align: center;
+/* Изображения */
+img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+.answer-img {
+    max-width: 80px;
+    margin-left: 10px;
+    vertical-align: middle;
+}
+
+/* Анимация появления */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Адаптивность */
+@media (max-width: 600px) {
+    .container {
+        padding: 15px;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    #login-section input,
+    #login-section button {
+        font-size: 0.9rem;
+    }
+
+    .client-header button {
+        font-size: 1rem;
+    }
 }

@@ -45,7 +45,8 @@ wss.on('connection', ws => {
                     const examsData = Array.from(activeExams.entries()).map(([examClientId, examData]) => ({
                         clientId: examClientId,
                         userInfo: examData.userInfo,
-                        questions: examData.questions
+                        questions: examData.questions,
+                        timer: examData.timer
                     }));
                     ws.send(JSON.stringify({ type: 'initialState', exams: examsData }));
                 }
@@ -100,7 +101,18 @@ wss.on('connection', ws => {
 
     ws.on('close', () => {
         console.log('Клиент отключился:', clientId);
-        // Не удаляем данные экзамена из activeExams, чтобы они сохранялись
+        const client = clients.get(clientId);
+
+        // Если это helper, уведомляем exam об отключении
+        if (client && client.role === 'helper') {
+            activeExams.delete(clientId); // Удаляем данные экзамена
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                    client.send(JSON.stringify({ type: 'clientDisconnected', clientId }));
+                }
+            });
+        }
+
         clients.delete(clientId);
     });
 });

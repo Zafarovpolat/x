@@ -63,15 +63,19 @@
 
                 let timeInSeconds = timeToSeconds(initialTime);
                 if (!timers[clientId]) {
-                    timers[clientId] = setInterval(() => {
-                        if (timeInSeconds > 0) {
-                            timeInSeconds--;
-                            timerSpan.textContent = ` | time: ${secondsToTime(timeInSeconds)}`;
-                        } else {
-                            clearInterval(timers[clientId]);
-                            delete timers[clientId];
+                    setTimeout(() => {
+                        if (timerSpan.textContent === ` | time: ${initialTime}`) {
+                            timers[clientId] = setInterval(() => {
+                                if (timeInSeconds > 0) {
+                                    timeInSeconds--;
+                                    timerSpan.textContent = ` | time: ${secondsToTime(timeInSeconds)}`;
+                                } else {
+                                    clearInterval(timers[clientId]);
+                                    delete timers[clientId];
+                                }
+                            }, 1000);
                         }
-                    }, 1000);
+                    }, 2000);
                 }
 
                 headerDiv.appendChild(toggleButton);
@@ -144,6 +148,21 @@
             clientsData[clientId].appendChild(questionDiv);
         }
 
+        function removeClient(clientId) {
+            const clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
+            if (clientSection) {
+                // Очищаем таймер, если он существует
+                if (timers[clientId]) {
+                    clearInterval(timers[clientId]);
+                    delete timers[clientId];
+                }
+                // Удаляем секцию клиента
+                clientSection.remove();
+                delete clientsData[clientId];
+                console.log(`Клиент ${clientId} удален из интерфейса`);
+            }
+        }
+
         socket.onmessage = event => {
             let data;
             try {
@@ -171,8 +190,35 @@
                 return;
             }
 
+            // Обработка отключения клиента
+            if (data.type === 'clientDisconnected') {
+                removeClient(data.clientId);
+                return;
+            }
+
             // Обработка новых данных
             if (data.clientId && data.userInfo && (data.question || data.questionImg) && data.answers) {
+                const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
+                if (clientSection) {
+                    const timerSpan = clientSection.querySelector('.timer');
+                    if (timerSpan && data.timer && timerSpan.textContent !== ` | time: ${data.timer}`) {
+                        timerSpan.textContent = ` | time: ${data.timer}`;
+                        if (!timers[data.clientId]) {
+                            let timeInSeconds = timeToSeconds(data.timer);
+                            setTimeout(() => {
+                                timers[data.clientId] = setInterval(() => {
+                                    if (timeInSeconds > 0) {
+                                        timeInSeconds--;
+                                        timerSpan.textContent = ` | time: ${secondsToTime(timeInSeconds)}`;
+                                    } else {
+                                        clearInterval(timers[data.clientId]);
+                                        delete timers[data.clientId];
+                                    }
+                                }, 1000);
+                            }, 2000);
+                        }
+                    }
+                }
                 renderExam(data);
             }
         };

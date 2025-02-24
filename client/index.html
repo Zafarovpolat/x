@@ -4,224 +4,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сайт-помощник</title>
+    <title>Вход в помощник для экзамена</title>
     <link rel="stylesheet" href="./style.css">
 </head>
 
 <body>
-    <h2>Помощник для экзамена</h2>
-    <div id="clients"></div>
+    <div id="login-section">
+        <h2>Вход</h2>
+        <input type="text" id="username" placeholder="Логин" required>
+        <input type="password" id="password" placeholder="Пароль" required>
+        <button id="login-btn">Войти</button>
+        <p id="auth-message"></p>
+    </div>
 
     <script>
-        const socket = new WebSocket('wss://x-q63z.onrender.com');
-        const clientsDiv = document.getElementById('clients');
-        const clientsData = {};
-        const timers = {};
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('login-btn');
+        const authMessage = document.getElementById('auth-message');
 
-        socket.onopen = () => {
-            console.log('WebSocket подключен на сайте-помощнике');
-            socket.send(JSON.stringify({ role: 'exam' }));
-        };
+        // Предопределенные учетные данные (только для вас)
+        const validUsername = 'admin';
+        const validPassword = '123123123'; // Замените на свой пароль
 
-        function timeToSeconds(timeStr) {
-            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
-            return hours * 3600 + minutes * 60 + seconds;
-        }
+        loginBtn.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
 
-        function secondsToTime(seconds) {
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            const secs = seconds % 60;
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        function renderExam(data) {
-            const { clientId, userInfo, question, questionImg, qIndex, answers, timer } = data;
-
-            let clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
-            if (!clientSection) {
-                clientSection = document.createElement('div');
-                clientSection.classList.add('client-section');
-                clientSection.dataset.clientId = clientId;
-
-                const headerDiv = document.createElement('div');
-                headerDiv.classList.add('client-header');
-
-                const toggleButton = document.createElement('button');
-                const timerSpan = document.createElement('span');
-                timerSpan.classList.add('timer');
-                const initialTime = timer || '00:00:00';
-                timerSpan.textContent = ` | time: ${initialTime}`;
-
-                toggleButton.appendChild(document.createTextNode(userInfo));
-                toggleButton.appendChild(timerSpan);
-
-                toggleButton.addEventListener('click', () => {
-                    const questionsDiv = clientSection.querySelector('.questions');
-                    questionsDiv.style.display = (questionsDiv.style.display === 'none' || !questionsDiv.style.display) ? 'block' : 'none';
-                });
-
-                let timeInSeconds = timeToSeconds(initialTime);
-                if (!timers[clientId]) {
-                    setTimeout(() => {
-                        if (timerSpan.textContent === ` | time: ${initialTime}`) {
-                            timers[clientId] = setInterval(() => {
-                                if (timeInSeconds > 0) {
-                                    timeInSeconds--;
-                                    timerSpan.textContent = ` | time: ${secondsToTime(timeInSeconds)}`;
-                                } else {
-                                    clearInterval(timers[clientId]);
-                                    delete timers[clientId];
-                                }
-                            }, 1000);
-                        }
-                    }, 2000);
-                }
-
-                headerDiv.appendChild(toggleButton);
-
-                const questionsDiv = document.createElement('div');
-                questionsDiv.classList.add('questions');
-
-                clientSection.appendChild(headerDiv);
-                clientSection.appendChild(questionsDiv);
-                clientsDiv.appendChild(clientSection);
-
-                clientsData[clientId] = questionsDiv;
-            }
-
-            const uniqueId = `${clientId}-${qIndex}`;
-            if (clientsData[clientId].querySelector(`.question[data-unique-id="${uniqueId}"]`)) return;
-
-            const questionDiv = document.createElement('div');
-            questionDiv.classList.add('question');
-            questionDiv.dataset.uniqueId = uniqueId;
-
-            if (question) {
-                const questionText = document.createElement('p');
-                questionText.innerHTML = `<strong>${qIndex + 1}. ${question}</strong>`;
-                questionDiv.appendChild(questionText);
-            }
-
-            if (questionImg) {
-                const questionImage = document.createElement('img');
-                questionImage.src = questionImg;
-                questionDiv.appendChild(questionImage);
-            }
-
-            const answersList = document.createElement('ul');
-            answers.forEach(({ text, img }, varIndex) => {
-                const listItem = document.createElement('li');
-                const label = document.createElement('label');
-                const input = document.createElement('input');
-                input.type = 'radio';
-                input.name = `question-${uniqueId}`;
-                input.value = text;
-                input.dataset.varIndex = varIndex;
-
-                input.addEventListener('change', () => {
-                    const response = JSON.stringify({
-                        qIndex,
-                        question,
-                        answer: text,
-                        varIndex,
-                        clientId
-                    });
-                    console.log('Отправка ответа в helper:', response);
-                    socket.send(response);
-                });
-
-                label.appendChild(input);
-                if (text) label.appendChild(document.createTextNode(` ${text}`));
-                if (img) {
-                    const answerImage = document.createElement('img');
-                    answerImage.src = img;
-                    answerImage.classList.add('answer-img');
-                    label.appendChild(answerImage);
-                }
-
-                listItem.appendChild(label);
-                answersList.appendChild(listItem);
-            });
-
-            questionDiv.appendChild(answersList);
-            clientsData[clientId].appendChild(questionDiv);
-        }
-
-        function removeClient(clientId) {
-            const clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
-            if (clientSection) {
-                // Очищаем таймер, если он существует
-                if (timers[clientId]) {
-                    clearInterval(timers[clientId]);
-                    delete timers[clientId];
-                }
-                // Удаляем секцию клиента
-                clientSection.remove();
-                delete clientsData[clientId];
-                console.log(`Клиент ${clientId} удален из интерфейса`);
-            }
-        }
-
-        socket.onmessage = event => {
-            let data;
-            try {
-                data = JSON.parse(event.data);
-            } catch (e) {
-                console.error('Ошибка парсинга JSON:', e);
+            if (!username || !password) {
+                authMessage.textContent = 'Введите логин и пароль';
+                authMessage.style.color = 'red';
                 return;
             }
 
-            // Обработка начального состояния
-            if (data.type === 'initialState') {
-                data.exams.forEach(exam => {
-                    exam.questions.forEach(question => {
-                        renderExam({
-                            clientId: exam.clientId,
-                            userInfo: exam.userInfo,
-                            question: question.question,
-                            questionImg: question.questionImg,
-                            qIndex: question.qIndex,
-                            answers: question.answers,
-                            timer: exam.timer
-                        });
-                    });
-                });
-                return;
+            if (username === validUsername && password === validPassword) {
+                // Сохраняем статус авторизации в localStorage
+                localStorage.setItem('isAuthenticated', 'true');
+                // Перенаправляем на exam.html
+                window.location.href = 'exam.html';
+            } else {
+                authMessage.textContent = 'Неверный логин или пароль';
+                authMessage.style.color = 'red';
             }
-
-            // Обработка отключения клиента
-            if (data.type === 'clientDisconnected') {
-                removeClient(data.clientId);
-                return;
-            }
-
-            // Обработка новых данных
-            if (data.clientId && data.userInfo && (data.question || data.questionImg) && data.answers) {
-                const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
-                if (clientSection) {
-                    const timerSpan = clientSection.querySelector('.timer');
-                    if (timerSpan && data.timer && timerSpan.textContent !== ` | time: ${data.timer}`) {
-                        timerSpan.textContent = ` | time: ${data.timer}`;
-                        if (!timers[data.clientId]) {
-                            let timeInSeconds = timeToSeconds(data.timer);
-                            setTimeout(() => {
-                                timers[data.clientId] = setInterval(() => {
-                                    if (timeInSeconds > 0) {
-                                        timeInSeconds--;
-                                        timerSpan.textContent = ` | time: ${secondsToTime(timeInSeconds)}`;
-                                    } else {
-                                        clearInterval(timers[data.clientId]);
-                                        delete timers[data.clientId];
-                                    }
-                                }, 1000);
-                            }, 2000);
-                        }
-                    }
-                }
-                renderExam(data);
-            }
-        };
+        });
     </script>
 </body>
 

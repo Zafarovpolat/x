@@ -1,14 +1,22 @@
 const WebSocket = require('ws');
 const express = require('express');
 const path = require('path');
+const cors = require('cors'); // Добавляем cors
 
 const app = express();
+
+// Настраиваем CORS
+app.use(cors({
+    origin: '*',
+}));
+
+// Раздача статических файлов
+app.use(express.static(path.join(__dirname, '../client')));
+
 const server = app.listen(process.env.PORT || 8080, () => {
     console.log('Server started on port', server.address().port);
 });
 const wss = new WebSocket.Server({ server });
-
-app.use(express.static(path.join(__dirname, '../client')));
 
 const clients = new Map();
 

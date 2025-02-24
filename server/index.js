@@ -1,6 +1,14 @@
 const WebSocket = require('ws');
+const express = require('express');
+const path = require('path');
 
-const wss = new WebSocket.Server({ port: 8080 });
+const app = express();
+const server = app.listen(process.env.PORT || 8080, () => {
+    console.log('Server started on port', server.address().port);
+});
+const wss = new WebSocket.Server({ server });
+
+app.use(express.static(path.join(__dirname, '../client')));
 
 const clients = new Map();
 
@@ -23,9 +31,8 @@ wss.on('connection', ws => {
                 return;
             }
 
-            // Отправка вопроса (с текстом или изображением) от helper всем exam
             if ((parsedMessage.question || parsedMessage.questionImg) && clients.get(clientId).role === 'helper') {
-                parsedMessage.clientId = clientId; // Сохраняем ID отправителя
+                parsedMessage.clientId = clientId;
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
                         client.send(JSON.stringify(parsedMessage));
@@ -33,7 +40,6 @@ wss.on('connection', ws => {
                 });
             }
 
-            // Ответ от exam отправляем конкретному helper
             if (parsedMessage.answer && clients.get(clientId).role === 'exam') {
                 const targetClient = clients.get(parsedMessage.clientId);
                 if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
@@ -41,7 +47,6 @@ wss.on('connection', ws => {
                 }
             }
 
-            // Обработанный ответ от helper отправляем всем exam
             if (parsedMessage.processedAnswer && clients.get(clientId).role === 'helper') {
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
@@ -49,7 +54,6 @@ wss.on('connection', ws => {
                     }
                 });
             }
-
         } catch (e) {
             console.error('Ошибка парсинга JSON на сервере:', e);
         }
@@ -61,4 +65,4 @@ wss.on('connection', ws => {
     });
 });
 
-console.log('WebSocket сервер запущен на порту 8080');
+console.log('WebSocket сервер запущен');

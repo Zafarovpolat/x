@@ -1,5 +1,5 @@
 (async () => {
-    const socket = new WebSocket('ws://localhost:8080');
+    const socket = new WebSocket('wss://x-q63z.onrender.com');
 
     function hideBannedScreen() {
         document.querySelectorAll('.js-banned-screen').forEach(bannedScreen => {

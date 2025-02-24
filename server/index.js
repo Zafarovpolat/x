@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const express = require('express');
 const path = require('path');
-const cors = require('cors'); // Добавляем cors
+const cors = require('cors');
 
 const app = express();
 
@@ -18,7 +18,9 @@ const server = app.listen(process.env.PORT || 8080, () => {
 });
 const wss = new WebSocket.Server({ server });
 
-const clients = new Map();
+// Хранилище активных клиентов и их данных
+const clients = new Map(); // Клиенты: { ws, role }
+const activeExams = new Map(); // Данные активных экзаменов: { clientId: { userInfo, questions } }
 
 wss.on('connection', ws => {
     console.log('Клиент подключился');
@@ -33,14 +35,41 @@ wss.on('connection', ws => {
         try {
             const parsedMessage = JSON.parse(message);
 
+            // Регистрация роли
             if (parsedMessage.role) {
                 clients.get(clientId).role = parsedMessage.role;
                 console.log(`Клиент ${clientId} зарегистрирован как ${parsedMessage.role}`);
+
+                // Если это exam, отправляем текущее состояние активных экзаменов
+                if (parsedMessage.role === 'exam') {
+                    const examsData = Array.from(activeExams.entries()).map(([examClientId, examData]) => ({
+                        clientId: examClientId,
+                        userInfo: examData.userInfo,
+                        questions: examData.questions
+                    }));
+                    ws.send(JSON.stringify({ type: 'initialState', exams: examsData }));
+                }
                 return;
             }
 
+            // Обработка вопроса от helper
             if ((parsedMessage.question || parsedMessage.questionImg) && clients.get(clientId).role === 'helper') {
                 parsedMessage.clientId = clientId;
+
+                // Сохраняем данные экзамена
+                if (!activeExams.has(clientId)) {
+                    activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer });
+                }
+                const examData = activeExams.get(clientId);
+                const questionData = {
+                    qIndex: parsedMessage.qIndex,
+                    question: parsedMessage.question,
+                    questionImg: parsedMessage.questionImg,
+                    answers: parsedMessage.answers
+                };
+                examData.questions.push(questionData);
+
+                // Отправляем всем exam
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
                         client.send(JSON.stringify(parsedMessage));
@@ -48,6 +77,7 @@ wss.on('connection', ws => {
                 });
             }
 
+            // Ответ от exam отправляем конкретному helper
             if (parsedMessage.answer && clients.get(clientId).role === 'exam') {
                 const targetClient = clients.get(parsedMessage.clientId);
                 if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
@@ -55,6 +85,7 @@ wss.on('connection', ws => {
                 }
             }
 
+            // Обработанный ответ от helper отправляем всем exam
             if (parsedMessage.processedAnswer && clients.get(clientId).role === 'helper') {
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
@@ -68,7 +99,8 @@ wss.on('connection', ws => {
     });
 
     ws.on('close', () => {
-        console.log('Клиент отключился');
+        console.log('Клиент отключился:', clientId);
+        // Не удаляем данные экзамена из activeExams, чтобы они сохранялись
         clients.delete(clientId);
     });
 });

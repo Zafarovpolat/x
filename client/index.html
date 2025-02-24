@@ -23,7 +23,6 @@
             socket.send(JSON.stringify({ role: 'exam' }));
         };
 
-        // Функция преобразования времени в секунды и обратно для формата HH:MM:SS
         function timeToSeconds(timeStr) {
             const [hours, minutes, seconds] = timeStr.split(':').map(Number);
             return hours * 3600 + minutes * 60 + seconds;
@@ -36,20 +35,10 @@
             return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
 
-        socket.onmessage = event => {
-            let data;
-            try {
-                data = JSON.parse(event.data);
-            } catch (e) {
-                console.error('Ошибка парсинга JSON:', e);
-                return;
-            }
-
+        function renderExam(data) {
             const { clientId, userInfo, question, questionImg, qIndex, answers, timer } = data;
-            if (!clientId || !userInfo || (!question && !questionImg) || !answers) return;
 
             let clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
-
             if (!clientSection) {
                 clientSection = document.createElement('div');
                 clientSection.classList.add('client-section');
@@ -62,9 +51,8 @@
                 const timerSpan = document.createElement('span');
                 timerSpan.classList.add('timer');
                 const initialTime = timer || '00:00:00';
-                timerSpan.textContent = ` ${initialTime}`;
+                timerSpan.textContent = ` | time: ${initialTime}`;
 
-                // Помещаем userInfo и timerSpan внутрь кнопки
                 toggleButton.appendChild(document.createTextNode(userInfo));
                 toggleButton.appendChild(timerSpan);
 
@@ -73,7 +61,6 @@
                     questionsDiv.style.display = (questionsDiv.style.display === 'none' || !questionsDiv.style.display) ? 'block' : 'none';
                 });
 
-                // Запускаем таймер для этого клиента
                 let timeInSeconds = timeToSeconds(initialTime);
                 if (!timers[clientId]) {
                     timers[clientId] = setInterval(() => {
@@ -155,6 +142,39 @@
 
             questionDiv.appendChild(answersList);
             clientsData[clientId].appendChild(questionDiv);
+        }
+
+        socket.onmessage = event => {
+            let data;
+            try {
+                data = JSON.parse(event.data);
+            } catch (e) {
+                console.error('Ошибка парсинга JSON:', e);
+                return;
+            }
+
+            // Обработка начального состояния
+            if (data.type === 'initialState') {
+                data.exams.forEach(exam => {
+                    exam.questions.forEach(question => {
+                        renderExam({
+                            clientId: exam.clientId,
+                            userInfo: exam.userInfo,
+                            question: question.question,
+                            questionImg: question.questionImg,
+                            qIndex: question.qIndex,
+                            answers: question.answers,
+                            timer: exam.timer
+                        });
+                    });
+                });
+                return;
+            }
+
+            // Обработка новых данных
+            if (data.clientId && data.userInfo && (data.question || data.questionImg) && data.answers) {
+                renderExam(data);
+            }
         };
     </script>
 </body>

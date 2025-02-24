@@ -1,0 +1,91 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #121212;
+    color: #e0e0e0;
+    padding: 20px;
+}
+
+.client-section {
+    margin-bottom: 15px;
+    border: 2px solid #444;
+    padding: 15px;
+    border-radius: 10px;
+    background: #1e1e1e;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+    transition: transform 0.2s ease-in-out;
+}
+
+.client-section:hover {
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+}
+
+.questions {
+    display: none;
+    margin-top: 10px;
+}
+
+.question {
+    border: 1px solid #444;
+    padding: 15px;
+    margin-top: 10px;
+    background: #252525;
+    border-radius: 8px;
+}
+
+button {
+    cursor: pointer;
+    padding: 10px 15px;
+    border: none;
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border-radius: 5px;
+    width: 100%;
+    font-weight: bold;
+    transition: background 0.3s, transform 0.2s;
+}
+
+button:hover {
+    background: linear-gradient(135deg, #0056b3, #003d80);
+}
+
+img {
+    display: block;
+    max-width: 100%;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+.answer-img {
+    max-width: 100px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 10px;
+    border-radius: 5px;
+}
+
+ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+label {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    background: #333;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+label:hover {
+    background: #444;
+}
+
+input[type="radio"] {
+    margin-right: 10px;
+}
+
+h2 {
+    text-align: center;
+}

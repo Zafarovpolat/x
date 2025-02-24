@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сайт-помощник</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+    <h2>Помощник для экзамена</h2>
+    <div id="clients"></div>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:8080');
+        const clientsDiv = document.getElementById('clients');
+        const clientsData = {};
+        const timers = {};
+
+        socket.onopen = () => {
+            console.log('WebSocket подключен на сайте-помощнике');
+            socket.send(JSON.stringify({ role: 'exam' }));
+        };
+
+        // Функция преобразования времени в секунды и обратно для формата HH:MM:SS
+        function timeToSeconds(timeStr) {
+            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+            return hours * 3600 + minutes * 60 + seconds;
+        }
+
+        function secondsToTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        socket.onmessage = event => {
+            let data;
+            try {
+                data = JSON.parse(event.data);
+            } catch (e) {
+                console.error('Ошибка парсинга JSON:', e);
+                return;
+            }
+
+            const { clientId, userInfo, question, questionImg, qIndex, answers, timer } = data;
+            if (!clientId || !userInfo || (!question && !questionImg) || !answers) return;
+
+            let clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
+
+            if (!clientSection) {
+                clientSection = document.createElement('div');
+                clientSection.classList.add('client-section');
+                clientSection.dataset.clientId = clientId;
+
+                const headerDiv = document.createElement('div');
+                headerDiv.classList.add('client-header');
+
+                const toggleButton = document.createElement('button');
+                const timerSpan = document.createElement('span');
+                timerSpan.classList.add('timer');
+                const initialTime = timer || '00:00:00';
+                timerSpan.textContent = ` ${initialTime}`;
+
+                // Помещаем userInfo и timerSpan внутрь кнопки
+                toggleButton.appendChild(document.createTextNode(userInfo));
+                toggleButton.appendChild(timerSpan);
+
+                toggleButton.addEventListener('click', () => {
+                    const questionsDiv = clientSection.querySelector('.questions');
+                    questionsDiv.style.display = (questionsDiv.style.display === 'none' || !questionsDiv.style.display) ? 'block' : 'none';
+                });
+
+                // Запускаем таймер для этого клиента
+                let timeInSeconds = timeToSeconds(initialTime);
+                if (!timers[clientId]) {
+                    timers[clientId] = setInterval(() => {
+                        if (timeInSeconds > 0) {
+                            timeInSeconds--;
+                            timerSpan.textContent = ` | time: ${secondsToTime(timeInSeconds)}`;
+                        } else {
+                            clearInterval(timers[clientId]);
+                            delete timers[clientId];
+                        }
+                    }, 1000);
+                }
+
+                headerDiv.appendChild(toggleButton);
+
+                const questionsDiv = document.createElement('div');
+                questionsDiv.classList.add('questions');
+
+                clientSection.appendChild(headerDiv);
+                clientSection.appendChild(questionsDiv);
+                clientsDiv.appendChild(clientSection);
+
+                clientsData[clientId] = questionsDiv;
+            }
+
+            const uniqueId = `${clientId}-${qIndex}`;
+            if (clientsData[clientId].querySelector(`.question[data-unique-id="${uniqueId}"]`)) return;
+
+            const questionDiv = document.createElement('div');
+            questionDiv.classList.add('question');
+            questionDiv.dataset.uniqueId = uniqueId;
+
+            if (question) {
+                const questionText = document.createElement('p');
+                questionText.innerHTML = `<strong>${qIndex + 1}. ${question}</strong>`;
+                questionDiv.appendChild(questionText);
+            }
+
+            if (questionImg) {
+                const questionImage = document.createElement('img');
+                questionImage.src = questionImg;
+                questionDiv.appendChild(questionImage);
+            }
+
+            const answersList = document.createElement('ul');
+            answers.forEach(({ text, img }, varIndex) => {
+                const listItem = document.createElement('li');
+                const label = document.createElement('label');
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = `question-${uniqueId}`;
+                input.value = text;
+                input.dataset.varIndex = varIndex;
+
+                input.addEventListener('change', () => {
+                    const response = JSON.stringify({
+                        qIndex,
+                        question,
+                        answer: text,
+                        varIndex,
+                        clientId
+                    });
+                    console.log('Отправка ответа в helper:', response);
+                    socket.send(response);
+                });
+
+                label.appendChild(input);
+                if (text) label.appendChild(document.createTextNode(` ${text}`));
+                if (img) {
+                    const answerImage = document.createElement('img');
+                    answerImage.src = img;
+                    answerImage.classList.add('answer-img');
+                    label.appendChild(answerImage);
+                }
+
+                listItem.appendChild(label);
+                answersList.appendChild(listItem);
+            });
+
+            questionDiv.appendChild(answersList);
+            clientsData[clientId].appendChild(questionDiv);
+        };
+    </script>
+</body>
+
+</html>

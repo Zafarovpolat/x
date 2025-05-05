@@ -5,8 +5,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход в помощник для экзамена</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./style.css">
+    <style>
+        /* Стили для тоста */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-size: 16px;
+        }
+
+        #toast.show {
+            visibility: visible;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+
+        @keyframes fadein {
+            from {
+                bottom: 0;
+                opacity: 0;
+            }
+
+            to {
+                bottom: 30px;
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeout {
+            from {
+                bottom: 30px;
+                opacity: 1;
+            }
+
+            to {
+                bottom: 0;
+                opacity: 0;
+            }
+        }
+    </style>
 </head>
 
 <body>
@@ -18,12 +64,15 @@
         <p id="auth-message"></p>
     </div>
 
+    <div id="toast">Пользователь отключился</div>
+
     <script>
         const socket = new WebSocket('wss://x-q63z.onrender.com');
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
         const loginBtn = document.getElementById('login-btn');
         const authMessage = document.getElementById('auth-message');
+        const toast = document.getElementById('toast');
 
         loginBtn.addEventListener('click', () => {
             const username = usernameInput.value.trim();
@@ -60,7 +109,21 @@
                     authMessage.textContent = 'Неверный логин или пароль';
                     authMessage.style.color = 'red';
                 }
+            } else if (data.type === 'clientDisconnected') {
+                // Показываем тост при отключении пользователя
+                toast.textContent = `Пользователь с ID ${data.clientId} отключился`;
+                toast.className = 'show';
+                setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000); // Скрываем тост через 3 секунды
             }
+        };
+
+        // Обработка ошибок соединения
+        socket.onerror = (error) => {
+            console.error('Ошибка WebSocket:', error);
+        };
+
+        socket.onclose = () => {
+            console.log('WebSocket соединение закрыто');
         };
     </script>
 </body>

@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const bcrypt = require('bcrypt'); // Добавляем bcrypt для хеширования
+const bcrypt = require('bcrypt');
 
 const app = express();
 
@@ -23,16 +23,28 @@ const wss = new WebSocket.Server({ server });
 const clients = new Map();
 const activeExams = new Map();
 
-// Предопределенные учетные данные (хеш пароля сгенерирован с помощью bcrypt)
+// Предопределенные учетные данные
 const adminUsername = 'admin';
-const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC'; // Ваш хеш здесь
+const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC';
 
 wss.on('connection', ws => {
     console.log('Клиент подключился');
 
     const clientId = Math.random().toString(36).substr(2, 9);
-    clients.set(clientId, { ws, role: null });
+    clients.set(clientId, { ws, role: null, lastActive: Date.now() });
     ws.clientId = clientId;
+
+    // Отправка пинга каждые 30 секунд для проверки активности
+    const pingInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.ping();
+            clients.get(clientId).lastActive = Date.now();
+        }
+    }, 30000);
+
+    ws.on('pong', () => {
+        clients.get(clientId).lastActive = Date.now();
+    });
 
     ws.on('message', async message => {
         console.log('Получено сообщение:', message);
@@ -121,6 +133,7 @@ wss.on('connection', ws => {
 
     ws.on('close', () => {
         console.log('Клиент отключился:', clientId);
+        clearInterval(pingInterval); // Очищаем интервал пинга
         const client = clients.get(clientId);
 
         if (client && client.role === 'helper') {
@@ -134,6 +147,25 @@ wss.on('connection', ws => {
 
         clients.delete(clientId);
     });
+
+    // Проверка неактивных клиентов каждые 60 секунд
+    setInterval(() => {
+        clients.forEach((client, id) => {
+            const inactiveTime = (Date.now() - client.lastActive) / 1000; // В секундах
+            if (inactiveTime > 60 && client.ws.readyState !== WebSocket.OPEN) { // 60 секунд неактивности
+                console.log(`Клиент ${id} неактивен более 60 секунд, удаление`);
+                if (client.role === 'helper') {
+                    activeExams.delete(id);
+                    wss.clients.forEach(otherClient => {
+                        if (otherClient.readyState === WebSocket.OPEN && clients.get(otherClient.clientId).role === 'exam') {
+                            otherClient.send(JSON.stringify({ type: 'clientDisconnected', clientId: id }));
+                        }
+                    });
+                }
+                clients.delete(id);
+            }
+        });
+    }, 60000);
 });
 
 console.log('WebSocket сервер запущен');

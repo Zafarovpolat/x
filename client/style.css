@@ -1,4 +1,6 @@
 /* Общие стили */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap');
+
 * {
     margin: 0;
     padding: 0;
@@ -7,78 +9,81 @@
 
 body {
     font-family: 'Roboto', sans-serif;
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
-    color: #e0e0e0;
     min-height: 100vh;
     padding: 20px;
     display: flex;
     justify-content: center;
     align-items: center;
+    background: #121212;
+    color: #d0d0d0;
+    transition: background 0.3s, color 0.3s;
 }
 
 /* Контейнер для контента */
 .container {
-    max-width: 800px;
-    width: 100%;
-    background: #252540;
-    border-radius: 15px;
-    padding: 25px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-    animation: fadeIn 0.5s ease-in-out;
+    max-width: 1440px;
+    width: 90%;
+    border-radius: 8px;
+    padding: 24px;
+    background: #1a1a1a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    animation: fadeIn 0.4s ease-out;
+    margin: 0 auto;
 }
 
 /* Заголовки */
 h2 {
     text-align: center;
-    margin-bottom: 20px;
-    font-size: 2rem;
-    color: #00d4ff;
-    text-shadow: 0 0 5px rgba(0, 212, 255, 0.5);
+    margin-bottom: 24px;
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: #ffffff;
 }
 
 /* Секция логина */
 #login-section {
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 12px;
 }
 
 #login-section input {
     padding: 12px;
-    border: none;
-    border-radius: 8px;
-    background: #1e1e2f;
-    color: #e0e0e0;
+    border: 1px solid #333333;
+    border-radius: 6px;
     font-size: 1rem;
     outline: none;
-    transition: box-shadow 0.3s;
+    background: #2a2a2a;
+    color: #d0d0d0;
+    transition: border 0.3s, background 0.3s;
 }
 
 #login-section input:focus {
-    box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+    border: 1px solid #808080;
 }
 
 #login-section button {
     padding: 12px;
     border: none;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #00d4ff, #007bff);
-    color: #fff;
-    font-size: 1.1rem;
-    font-weight: bold;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
     cursor: pointer;
-    transition: transform 0.2s, background 0.3s;
+    background: #404040;
+    color: #ffffff;
+    transition: background 0.3s, transform 0.2s;
 }
 
 #login-section button:hover {
-    background: linear-gradient(135deg, #007bff, #0056b3);
     transform: translateY(-2px);
+    background: #505050;
 }
 
 #auth-message {
     text-align: center;
-    font-size: 0.9rem;
-    margin-top: 10px;
+    font-size: 0.875rem;
+    margin-top: 12px;
+    color: #a0a0a0;
 }
 
 /* Секция авторизации (при отсутствии доступа) */
@@ -87,83 +92,75 @@ h2 {
 }
 
 #auth-check a {
-    color: #00d4ff;
     text-decoration: none;
+    color: #d0d0d0;
     transition: color 0.3s;
 }
 
 #auth-check a:hover {
-    color: #007bff;
+    color: #ffffff;
 }
 
 /* Контейнер клиентов */
 #clients {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
 }
 
 /* Секция клиента */
 .client-section {
-    background: #1e1e2f;
-    border-radius: 10px;
-    padding: 15px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    transition: transform 0.2s, box-shadow 0.3s;
-}
-
-.client-section:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 6px 20px rgba(0, 212, 255, 0.2);
+    border-radius: 6px;
+    padding: 16px;
+    background: #222222;
+    transition: background 0.3s;
 }
 
 /* Заголовок клиента */
 .client-header button {
     width: 100%;
     padding: 12px;
-    background: linear-gradient(135deg, #00d4ff, #007bff);
     border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 1.1rem;
-    font-weight: bold;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 400;
     cursor: pointer;
+    background: #2a2a2a;
+    color: #d0d0d0;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     transition: background 0.3s;
 }
 
 .client-header button:hover {
-    background: linear-gradient(135deg, #007bff, #0056b3);
+    background: #333333;
 }
 
 .client-header .timer {
-    font-size: 0.9rem;
-    color: #e0e0e0;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 5px 10px;
-    border-radius: 5px;
+    font-size: 0.875rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: #1a1a1a;
+    color: #a0a0a0;
 }
 
 /* Вопросы */
 .questions {
     display: none;
-    margin-top: 15px;
+    margin-top: 12px;
 }
 
 .question {
-    background: #252540;
-    border-radius: 8px;
-    padding: 15px;
-    margin-top: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 8px;
+    background: #1a1a1a;
 }
 
 .question p {
-    font-size: 1.1rem;
-    margin-bottom: 10px;
-    color: #e0e0e0;
+    font-size: 1rem;
+    margin-bottom: 8px;
 }
 
 /* Список ответов */
@@ -175,40 +172,45 @@ label {
     display: flex;
     align-items: center;
     padding: 10px;
-    background: #1e1e2f;
-    border-radius: 6px;
-    margin: 5px 0;
+    border-radius: 4px;
+    margin: 4px 0;
     cursor: pointer;
+    background: #2a2a2a;
+    color: #d0d0d0;
     transition: background 0.2s;
 }
 
 label:hover {
-    background: #2a2a40;
+    background: #333333;
 }
 
 input[type="radio"] {
-    margin-right: 10px;
-    accent-color: #00d4ff;
+    margin-right: 8px;
+    accent-color: #808080;
 }
 
 /* Изображения */
 img {
     max-width: 100%;
-    border-radius: 8px;
-    margin-top: 10px;
+    border-radius: 6px;
+    margin-top: 8px;
 }
 
 .answer-img {
-    max-width: 80px;
-    margin-left: 10px;
+    max-width: 50px;
+    margin-left: 8px;
     vertical-align: middle;
+}
+
+.main {
+    width: 100%;
 }
 
 /* Анимация появления */
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(20px);
+        transform: translateY(10px);
     }
 
     to {
@@ -220,19 +222,19 @@ img {
 /* Адаптивность */
 @media (max-width: 600px) {
     .container {
-        padding: 15px;
+        padding: 16px;
     }
 
     h2 {
-        font-size: 1.5rem;
+        font-size: 1.25rem;
     }
 
     #login-section input,
     #login-section button {
-        font-size: 0.9rem;
+        font-size: 0.875rem;
     }
 
     .client-header button {
-        font-size: 1rem;
+        font-size: 0.875rem;
     }
 }

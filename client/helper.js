@@ -80,6 +80,28 @@
                 console.log('Отправка обработанного ответа в exam:', processedResponse);
                 socket.send(JSON.stringify(processedResponse));
 
+                // Добавляем эффект изменения opacity при наведении на .breadcrumb-header
+                const breadcrumbHeader = document.querySelector('.breadcrumb-header');
+                if (breadcrumbHeader) {
+                    const coloredSpan = breadcrumbHeader.querySelector('span');
+                    const targetElement = coloredSpan || breadcrumbHeader; // Применяем эффект к span, если он есть, иначе к самому breadcrumbHeader
+
+                    // Устанавливаем начальную opacity, если не задана
+                    if (!targetElement.style.opacity) {
+                        targetElement.style.opacity = "1";
+                    }
+
+                    // При наведении уменьшаем opacity до 0.7
+                    targetElement.onmouseover = () => {
+                        targetElement.style.opacity = "0.7";
+                    };
+
+                    // При уходе мыши возвращаем opacity к 1
+                    targetElement.onmouseout = () => {
+                        targetElement.style.opacity = "1";
+                    };
+                }
+
                 document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
                     if (qIndex === response.qIndex) {
                         const labels = questionEl.querySelectorAll('.test-answers label');
@@ -87,7 +109,7 @@
                             const p = label.querySelector("p");
                             if (p) {
                                 p.style.color = "#666";
-                                p.style.fontWeight = "600";
+                                p.style.opacity = "1";
                                 label.onmouseover = null;
                                 label.onmouseout = null;
                             }
@@ -100,8 +122,7 @@
                             if (varIndex === response.varIndex) {
                                 label.onmouseover = () => {
                                     if (p) {
-                                        p.style.color = "black";
-                                        p.style.fontWeight = "900";
+                                        p.style.opacity = "0.7";
                                     }
                                     if (img) {
                                         img.style.opacity = "0.5";
@@ -110,7 +131,7 @@
                                 label.onmouseout = () => {
                                     if (p) {
                                         p.style.color = "#666";
-                                        p.style.fontWeight = "600";
+                                        p.style.opacity = "1";
                                     }
                                     if (img) {
                                         img.style.opacity = "1";
@@ -120,13 +141,13 @@
                                 label.onmouseover = () => {
                                     if (p) {
                                         p.style.color = "#666";
-                                        p.style.fontWeight = "600";
+                                        p.style.opacity = "1";
                                     }
                                 };
                                 label.onmouseout = () => {
                                     if (p) {
                                         p.style.color = "#666";
-                                        p.style.fontWeight = "600";
+                                        p.style.opacity = "1";
                                     }
                                 };
                             }

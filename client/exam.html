@@ -5,19 +5,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Сайт-помощник</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./style.css">
 </head>
 
 <body>
-    <div id="auth-check" style="display: none;">
-        <h2>Требуется авторизация</h2>
-        <p>Пожалуйста, <a href="./index.html">войдите</a> для доступа к помощнику.</p>
-    </div>
-    <div id="exam-content" style="display: none;">
-        <h2>Помощник для экзамена</h2>
-        <div id="clients"></div>
-    </div>
+
+    <section class="main">
+        <div class="container">
+            <div id="auth-check" style="display: none;">
+                <h2>Требуется авторизация</h2>
+                <p>Пожалуйста, <a href="./index.html">войдите</a> для доступа к помощнику.</p>
+            </div>
+            <div id="exam-content" style="display: none;">
+                <h2>Помощник для экзамена</h2>
+                <div id="clients"></div>
+            </div>
+        </div>
+    </section>
 
     <script>
         // Проверка авторизации
@@ -67,7 +71,7 @@
                     const timerSpan = document.createElement('span');
                     timerSpan.classList.add('timer');
                     const initialTime = timer || '00:00:00';
-                    timerSpan.textContent = ` | time: ${initialTime}`;
+                    timerSpan.textContent = `${initialTime}`;
 
                     toggleButton.appendChild(document.createTextNode(userInfo));
                     toggleButton.appendChild(timerSpan);
@@ -80,11 +84,11 @@
                     let timeInSeconds = timeToSeconds(initialTime);
                     if (!timers[clientId]) {
                         setTimeout(() => {
-                            if (timerSpan.textContent === ` | time: ${initialTime}`) {
+                            if (timerSpan.textContent === `${initialTime}`) {
                                 timers[clientId] = setInterval(() => {
                                     if (timeInSeconds > 0) {
                                         timeInSeconds--;
-                                        timerSpan.textContent = ` | time: ${secondsToTime(timeInSeconds)}`;
+                                        timerSpan.textContent = `${secondsToTime(timeInSeconds)}`;
                                     } else {
                                         clearInterval(timers[clientId]);
                                         delete timers[clientId];
@@ -212,15 +216,15 @@
                     const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
                     if (clientSection) {
                         const timerSpan = clientSection.querySelector('.timer');
-                        if (timerSpan && data.timer && timerSpan.textContent !== ` | time: ${data.timer}`) {
-                            timerSpan.textContent = ` | time: ${data.timer}`;
+                        if (timerSpan && data.timer && timerSpan.textContent !== `${data.timer}`) {
+                            timerSpan.textContent = `${data.timer}`;
                             if (!timers[data.clientId]) {
                                 let timeInSeconds = timeToSeconds(data.timer);
                                 setTimeout(() => {
                                     timers[data.clientId] = setInterval(() => {
                                         if (timeInSeconds > 0) {
                                             timeInSeconds--;
-                                            timerSpan.textContent = ` | time: ${secondsToTime(timeInSeconds)}`;
+                                            timerSpan.textContent = `${secondsToTime(timeInSeconds)}`;
                                         } else {
                                             clearInterval(timers[data.clientId]);
                                             delete timers[data.clientId];

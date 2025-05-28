@@ -52,12 +52,6 @@
                 opacity: 0;
             }
         }
-
-        #timer-display {
-            margin-top: 20px;
-            font-size: 24px;
-            color: #333;
-        }
     </style>
 </head>
 
@@ -70,7 +64,6 @@
         <p id="auth-message"></p>
     </div>
 
-    <div id="timer-display">Таймер: 00:00:00</div>
     <div id="toast">Пользователь отключился</div>
 
     <script>
@@ -80,7 +73,6 @@
         const loginBtn = document.getElementById('login-btn');
         const authMessage = document.getElementById('auth-message');
         const toast = document.getElementById('toast');
-        const timerDisplay = document.getElementById('timer-display');
 
         loginBtn.addEventListener('click', () => {
             const username = usernameInput.value.trim();
@@ -122,13 +114,9 @@
                 toast.textContent = `Пользователь с ID ${data.clientId} отключился`;
                 toast.className = 'show';
                 setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000); // Скрываем тост через 3 секунды
-            } else if (data.type === 'timerUpdate') {
-                // Обновляем отображение таймера
-                timerDisplay.textContent = `Таймер: ${data.timer}`;
             }
         };
 
-        // Обработка ошибок соединения
         socket.onerror = (error) => {
             console.error('Ошибка WebSocket:', error);
         };

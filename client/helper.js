@@ -26,10 +26,9 @@
         const timerText = timerElement?.innerText.trim() || "00:00:00";
         const data = JSON.stringify({
             type: 'timerUpdate',
-            timer: timerText,
-            clientId: socket.clientId
+            timer: timerText
         });
-        console.log('Отправка обновления таймера:', data);
+        console.log('Отправка обновления таймера:', data, 'селектор:', timerElement?.tagName, timerElement?.id, timerElement?.className);
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(data);
         } else {
@@ -38,17 +37,16 @@
     }
 
     function sendQuestions() {
-        const questions = document.querySelectorAll('.test-table, .question, [class*="question"], .quiz, .item, .test-item, .problem');
+        const questions = document.querySelectorAll('.test-table');
         const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
         const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
 
         questions.forEach((questionEl, qInd) => {
-            const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span, p, span, h1, h2, h3, div:not(:has(*))');
-            const questionText = questionTextEl?.innerText.trim() || "";
-            const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img, img')?.src || "";
+            const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || "";
+            const questionImg = questionEl.querySelector('.test-question img')?.src || "";
             const answers = [];
 
-            questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label, li label, .option label, .choice label').forEach(answerEl => {
+            questionEl.querySelectorAll('.test-answers li label').forEach(answerEl => {
                 const answerText = answerEl.innerText.trim();
                 const answerImg = answerEl.querySelector('img')?.src || "";
                 answers.push({ text: answerText, img: answerImg });
@@ -56,73 +54,27 @@
 
             if ((questionText || questionImg) && answers.length > 0) {
                 const data = JSON.stringify({
-                    type: 'question',
                     qIndex: qInd,
                     question: questionText,
                     questionImg: questionImg,
                     answers: answers,
                     userInfo: breadcrumbText,
-                    timer: timerText,
-                    clientId: socket.clientId
+                    timer: timerText
                 });
 
-                console.log('Отправка вопроса и вариантов:', data);
+                console.log('Отправка вопроса и вариантов с изображениями:', data);
                 socket.send(data);
-            } else {
-                console.log('Пропущен вопрос:', { qIndex: qInd, questionText, answers, questionEl: questionEl.outerHTML });
             }
-        });
-    }
-
-    function sendSelectedAnswer() {
-        document.querySelectorAll('.test-answers input[type="radio"], .answers input[type="radio"], [class*="answer"] input[type="radio"], input[type="radio"], .option input[type="radio"], .choice input[type="radio"]').forEach(radio => {
-            radio.addEventListener('change', () => {
-                const questionEl = radio.closest('.test-table, .question, [class*="question"], .quiz, .item, .test-item, .problem');
-                const qIndex = Array.from(document.querySelectorAll('.test-table, .question, [class*="question"], .quiz, .item, .test-item, .problem')).indexOf(questionEl);
-                const answerText = radio.parentElement.innerText.trim();
-                const varIndex = Array.from(radio.closest('.test-answers, .answers, [class*="answer"], .options, .choices').querySelectorAll('input[type="radio"]')).indexOf(radio);
-                const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span, p, span, h1, h2, h3, div:not(:has(*))');
-                const questionText = questionTextEl?.innerText.trim() || "";
-                const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img, img')?.src || "";
-                const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
-                const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
-                const answers = [];
-
-                questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label, li label, .option label, .choice label').forEach(answerEl => {
-                    const answerText = answerEl.innerText.trim();
-                    const answerImg = answerEl.querySelector('img')?.src || "";
-                    answers.push({ text: answerText, img: answerImg });
-                });
-
-                const data = JSON.stringify({
-                    type: 'userAnswer',
-                    qIndex: qIndex,
-                    question: questionText,
-                    questionImg: questionImg,
-                    answer: answerText,
-                    varIndex: varIndex,
-                    answers: answers,
-                    userInfo: breadcrumbText,
-                    timer: timerText,
-                    clientId: socket.clientId
-                });
-
-                console.log('Отправка выбранного ответа:', data);
-                if (socket.readyState === WebSocket.OPEN) {
-                    socket.send(data);
-                }
-            });
         });
     }
 
     socket.onopen = () => {
         console.log('WebSocket подключен');
-        socket.clientId = Math.random().toString(36).substr(2, 9);
-        socket.send(JSON.stringify({ role: 'helper', clientId: socket.clientId }));
+        socket.send(JSON.stringify({ role: 'helper' }));
         setTimeout(() => {
             sendQuestions();
-            sendSelectedAnswer();
         }, 2000);
+        console.log('Установка интервала для sendTimerUpdate');
         setInterval(() => {
             console.log('Вызов sendTimerUpdate');
             sendTimerUpdate();
@@ -165,9 +117,9 @@
                     };
                 }
 
-                document.querySelectorAll('.test-table, .question, [class*="question"], .quiz, .item, .test-item, .problem').forEach((questionEl, qIndex) => {
+                document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
                     if (qIndex === response.qIndex) {
-                        const labels = questionEl.querySelectorAll('.test-answers label, .answers label, [class*="answer"] label, .option label, .choice label');
+                        const labels = questionEl.querySelectorAll('.test-answers label');
                         labels.forEach((label) => {
                             const p = label.querySelector("p");
                             if (p) {
@@ -251,11 +203,9 @@
             const newSocket = new WebSocket('wss://x-q63z.onrender.com');
             newSocket.onopen = () => {
                 console.log('WebSocket переподключен');
-                newSocket.clientId = socket.clientId;
-                newSocket.send(JSON.stringify({ role: 'helper', clientId: newSocket.clientId }));
+                newSocket.send(JSON.stringify({ role: 'helper' }));
                 setTimeout(() => {
                     sendQuestions();
-                    sendSelectedAnswer();
                     console.log('Установка интервала для sendTimerUpdate после переподключения');
                     setInterval(() => {
                         console.log('Вызов sendTimerUpdate');

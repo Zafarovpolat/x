@@ -88,7 +88,9 @@ wss.on('connection', ws => {
             }
 
             // Обработка вопроса от helper
-            if (parsedMessage.type === 'question' && clients.get(clientId).role === 'helper') {
+            if ((parsedMessage.question || parsedMessage.questionImg) && clients.get(clientId).role === 'helper') {
+                parsedMessage.clientId = clientId;
+
                 if (!activeExams.has(clientId)) {
                     activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer });
                 }
@@ -99,63 +101,12 @@ wss.on('connection', ws => {
                     questionImg: parsedMessage.questionImg,
                     answers: parsedMessage.answers
                 };
-                const existingQuestion = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
-                if (!existingQuestion) {
-                    examData.questions.push(questionData);
-                } else {
-                    existingQuestion.question = parsedMessage.question;
-                    existingQuestion.questionImg = parsedMessage.questionImg;
-                    existingQuestion.answers = parsedMessage.answers;
-                }
-                examData.timer = parsedMessage.timer;
+                examData.questions.push(questionData);
+                examData.timer = parsedMessage.timer; // Обновляем таймер
 
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
                         client.send(JSON.stringify(parsedMessage));
-                    }
-                });
-            }
-
-            // Обработка ответа пользователя от helper
-            if (parsedMessage.type === 'userAnswer' && clients.get(clientId).role === 'helper') {
-                if (!activeExams.has(clientId)) {
-                    activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer });
-                }
-                const examData = activeExams.get(clientId);
-                const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
-                if (question) {
-                    question.userAnswer = {
-                        answer: parsedMessage.answer,
-                        varIndex: parsedMessage.varIndex
-                    };
-                } else {
-                    examData.questions.push({
-                        qIndex: parsedMessage.qIndex,
-                        question: parsedMessage.question,
-                        questionImg: parsedMessage.questionImg,
-                        answers: parsedMessage.answers || [],
-                        userAnswer: {
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex
-                        }
-                    });
-                }
-                examData.timer = parsedMessage.timer;
-
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
-                        client.send(JSON.stringify({
-                            type: 'userAnswer',
-                            clientId: clientId,
-                            qIndex: parsedMessage.qIndex,
-                            question: parsedMessage.question,
-                            questionImg: parsedMessage.questionImg,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex,
-                            answers: parsedMessage.answers || [],
-                            userInfo: parsedMessage.userInfo,
-                            timer: parsedMessage.timer
-                        }));
                     }
                 });
             }
@@ -181,6 +132,7 @@ wss.on('connection', ws => {
             if (parsedMessage.type === 'timerUpdate' && clients.get(clientId).role === 'helper') {
                 if (activeExams.has(clientId)) {
                     activeExams.get(clientId).timer = parsedMessage.timer;
+                    // Отправляем обновление времени всем клиентам с ролью exam
                     wss.clients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
                             client.send(JSON.stringify({
@@ -199,7 +151,7 @@ wss.on('connection', ws => {
 
     ws.on('close', () => {
         console.log('Клиент отключился:', clientId);
-        clearInterval(pingInterval);
+        clearInterval(pingInterval); // Очищаем интервал пинга
         const client = clients.get(clientId);
 
         if (client && client.role === 'helper') {
@@ -217,8 +169,8 @@ wss.on('connection', ws => {
     // Проверка неактивных клиентов каждые 60 секунд
     setInterval(() => {
         clients.forEach((client, id) => {
-            const inactiveTime = (Date.now() - client.lastActive) / 1000;
-            if (inactiveTime > 60 && client.ws.readyState !== WebSocket.OPEN) {
+            const inactiveTime = (Date.now() - client.lastActive) / 1000; // В секундах
+            if (inactiveTime > 60 && client.ws.readyState !== WebSocket.OPEN) { // 60 секунд неактивности
                 console.log(`Клиент ${id} неактивен более 60 секунд, удаление`);
                 if (client.role === 'helper') {
                     activeExams.delete(id);

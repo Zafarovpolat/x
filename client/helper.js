@@ -59,7 +59,8 @@
                     questionImg: questionImg,
                     answers: answers,
                     userInfo: breadcrumbText,
-                    timer: timerText
+                    timer: timerText,
+                    clientId: socket.clientId
                 });
 
                 console.log('Отправка вопроса и вариантов с изображениями:', data);
@@ -68,11 +69,42 @@
         });
     }
 
+    function sendSelectedAnswer() {
+        document.querySelectorAll('.test-answers input[type="radio"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const questionEl = radio.closest('.test-table');
+                const qIndex = Array.from(document.querySelectorAll('.test-table')).indexOf(questionEl);
+                const answerText = radio.parentElement.innerText.trim();
+                const varIndex = Array.from(radio.closest('.test-answers').querySelectorAll('input[type="radio"]')).indexOf(radio);
+                const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || "";
+                const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
+                const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
+
+                const data = JSON.stringify({
+                    type: 'userAnswer',
+                    qIndex: qIndex,
+                    question: questionText,
+                    answer: answerText,
+                    varIndex: varIndex,
+                    userInfo: breadcrumbText,
+                    timer: timerText,
+                    clientId: socket.clientId
+                });
+
+                console.log('Отправка выбранного ответа:', data);
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(data);
+                }
+            });
+        });
+    }
+
     socket.onopen = () => {
         console.log('WebSocket подключен');
         socket.send(JSON.stringify({ role: 'helper' }));
         setTimeout(() => {
             sendQuestions();
+            sendSelectedAnswer();
         }, 2000);
         console.log('Установка интервала для sendTimerUpdate');
         setInterval(() => {
@@ -206,6 +238,7 @@
                 newSocket.send(JSON.stringify({ role: 'helper' }));
                 setTimeout(() => {
                     sendQuestions();
+                    sendSelectedAnswer();
                     console.log('Установка интервала для sendTimerUpdate после переподключения');
                     setInterval(() => {
                         console.log('Вызов sendTimerUpdate');

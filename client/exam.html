@@ -42,14 +42,6 @@
             cursor: pointer;
             padding: 5px 10px;
         }
-        .answered-question label {
-            background-color: #d4edda; /* Light green for answered questions */
-            border-color: #28a745;
-        }
-        .answered-question input[type="radio"]:checked + span {
-            font-weight: bold;
-            color: #155724;
-        }
     </style>
 </head>
 
@@ -79,8 +71,7 @@
         function startExam() {
             const socket = new WebSocket('wss://x-q63z.onrender.com');
             const clientsDiv = document.getElementById('clients');
-            const clientsData = {}; // Stores question containers for each client
-            const clientAnswers = {}; // Stores answers for each client
+            const clientsData = {};
 
             socket.onopen = () => {
                 console.log('WebSocket подключен на сайте-помощнике');
@@ -88,7 +79,7 @@
             };
 
             function renderExam(data) {
-                const { clientId, userInfo, question, questionImg, qIndex, answers, timer, userAnswer } = data; // Added userAnswer
+                const { clientId, userInfo, question, questionImg, qIndex, answers, timer } = data;
 
                 let clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
                 if (!clientSection) {
@@ -123,7 +114,6 @@
                     clientsDiv.appendChild(clientSection);
 
                     clientsData[clientId] = questionsDiv;
-                    clientAnswers[clientId] = clientAnswers[clientId] || {}; // Initialize answers for this client
                 } else {
                     // Обновляем таймер, если он пришел в данных
                     if (timer) {
@@ -133,13 +123,7 @@
                 }
 
                 const uniqueId = `${clientId}-${qIndex}`;
-                if (clientsData[clientId].querySelector(`.question[data-unique-id="${uniqueId}"]`)) {
-                    // If question already exists, just update its state if an answer is provided
-                    if (userAnswer !== undefined) {
-                        updateAnswerDisplay(clientId, qIndex, userAnswer);
-                    }
-                    return;
-                }
+                if (clientsData[clientId].querySelector(`.question[data-unique-id="${uniqueId}"]`)) return;
 
                 const questionDiv = document.createElement('div');
                 questionDiv.classList.add('question');
@@ -175,14 +159,10 @@
                             question,
                             answer: text,
                             varIndex,
-                            clientId // This is the helper's clientId
+                            clientId
                         });
                         console.log('Отправка ответа в helper:', response);
                         socket.send(response);
-
-                        // Store the answer locally and update UI immediately
-                        clientAnswers[clientId][qIndex] = { answer: text, varIndex: varIndex };
-                        updateAnswerDisplay(clientId, qIndex, { varIndex: varIndex });
                     });
 
                     label.appendChild(input);
@@ -200,27 +180,6 @@
 
                 questionDiv.appendChild(answersList);
                 clientsData[clientId].appendChild(questionDiv);
-
-                // If initial state includes an answer, select it
-                if (userAnswer !== undefined) {
-                    updateAnswerDisplay(clientId, qIndex, userAnswer);
-                }
-            }
-
-            function updateAnswerDisplay(clientId, qIndex, userAnswer) {
-                const uniqueId = `${clientId}-${qIndex}`;
-                const questionDiv = clientsData[clientId]?.querySelector(`.question[data-unique-id="${uniqueId}"]`);
-                if (questionDiv) {
-                    const radioButtons = questionDiv.querySelectorAll(`input[name="question-${uniqueId}"]`);
-                    radioButtons.forEach(radio => {
-                        radio.checked = false; // Deselect all first
-                        radio.parentNode.classList.remove('answered-question'); // Remove highlight
-                        if (parseInt(radio.dataset.varIndex) === userAnswer.varIndex) {
-                            radio.checked = true;
-                            radio.parentNode.classList.add('answered-question'); // Highlight the selected answer
-                        }
-                    });
-                }
             }
 
             function removeClient(clientId) {
@@ -228,7 +187,6 @@
                 if (clientSection) {
                     clientSection.remove();
                     delete clientsData[clientId];
-                    delete clientAnswers[clientId]; // Also remove answers for the disconnected client
                     console.log(`Клиент ${clientId} удален из интерфейса`);
                 }
             }
@@ -245,7 +203,6 @@
                 if (data.type === 'initialState') {
                     data.exams.forEach(exam => {
                         exam.questions.forEach(question => {
-                            const userAnswer = exam.answers.find(ans => ans.qIndex === question.qIndex);
                             renderExam({
                                 clientId: exam.clientId,
                                 userInfo: exam.userInfo,
@@ -253,8 +210,7 @@
                                 questionImg: question.questionImg,
                                 qIndex: question.qIndex,
                                 answers: question.answers,
-                                timer: exam.timer,
-                                userAnswer: userAnswer // Pass the stored answer
+                                timer: exam.timer
                             });
                         });
                     });
@@ -274,15 +230,6 @@
                             timerSpan.textContent = data.timer;
                         }
                     }
-                    return;
-                }
-
-                // New handler for user's own answers from any exam client
-                if (data.type === 'userAnswer') {
-                    console.log('Received userAnswer:', data);
-                    clientAnswers[data.clientId] = clientAnswers[data.clientId] || {};
-                    clientAnswers[data.clientId][data.qIndex] = { answer: data.answer, varIndex: data.varIndex };
-                    updateAnswerDisplay(data.clientId, data.qIndex, { varIndex: data.varIndex });
                     return;
                 }
 

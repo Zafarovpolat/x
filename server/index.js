@@ -80,8 +80,7 @@ wss.on('connection', ws => {
                         clientId: examClientId,
                         userInfo: examData.userInfo,
                         questions: examData.questions,
-                        timer: examData.timer,
-                        answers: examData.answers // Include answers here
+                        timer: examData.timer
                     }));
                     ws.send(JSON.stringify({ type: 'initialState', exams: examsData }));
                 }
@@ -93,7 +92,7 @@ wss.on('connection', ws => {
                 parsedMessage.clientId = clientId;
 
                 if (!activeExams.has(clientId)) {
-                    activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer, answers: [] }); // Initialize answers array
+                    activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer });
                 }
                 const examData = activeExams.get(clientId);
                 const questionData = {
@@ -118,39 +117,6 @@ wss.on('connection', ws => {
                 if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
                     targetClient.ws.send(JSON.stringify(parsedMessage));
                 }
-
-                // Store the answer in activeExams for this client
-                if (activeExams.has(clientId)) {
-                    const examData = activeExams.get(clientId);
-                    // Update existing answer or add new one
-                    const existingAnswerIndex = examData.answers.findIndex(a => a.qIndex === parsedMessage.qIndex);
-                    if (existingAnswerIndex > -1) {
-                        examData.answers[existingAnswerIndex] = {
-                            qIndex: parsedMessage.qIndex,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex
-                        };
-                    } else {
-                        examData.answers.push({
-                            qIndex: parsedMessage.qIndex,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex
-                        });
-                    }
-                }
-
-                // Broadcast the answer to all exam clients (including the sender to confirm)
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
-                        client.send(JSON.stringify({
-                            type: 'userAnswer', // New type for user's own answer
-                            clientId: clientId, // The client who answered
-                            qIndex: parsedMessage.qIndex,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex
-                        }));
-                    }
-                });
             }
 
             // Обработанный ответ от helper отправляем всем exam

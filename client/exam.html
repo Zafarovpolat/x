@@ -6,10 +6,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Сайт-помощник</title>
     <link rel="stylesheet" href="./style.css">
+    <style>
+        .client-section {
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .client-header {
+            display: flex;
+            align-items: center;
+        }
+        .timer {
+            margin-left: 10px;
+            font-size: 18px;
+            color: #333;
+        }
+        .questions {
+            margin-top: 10px;
+        }
+        .question {
+            margin-bottom: 15px;
+        }
+        .answers {
+            list-style: none;
+            padding: 0;
+        }
+        .answers li {
+            margin: 5px 0;
+            cursor: pointer;
+        }
+        .answer-img {
+            max-width: 100px;
+        }
+        button {
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+    </style>
 </head>
 
 <body>
-
     <section class="main">
         <div class="container">
             <div id="auth-check" style="display: none;">
@@ -36,24 +72,11 @@
             const socket = new WebSocket('wss://x-q63z.onrender.com');
             const clientsDiv = document.getElementById('clients');
             const clientsData = {};
-            const timers = {};
 
             socket.onopen = () => {
                 console.log('WebSocket подключен на сайте-помощнике');
                 socket.send(JSON.stringify({ role: 'exam' }));
             };
-
-            function timeToSeconds(timeStr) {
-                const [hours, minutes, seconds] = timeStr.split(':').map(Number);
-                return hours * 3600 + minutes * 60 + seconds;
-            }
-
-            function secondsToTime(seconds) {
-                const hours = Math.floor(seconds / 3600);
-                const minutes = Math.floor((seconds % 3600) / 60);
-                const secs = seconds % 60;
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-            }
 
             function renderExam(data) {
                 const { clientId, userInfo, question, questionImg, qIndex, answers, timer } = data;
@@ -70,10 +93,9 @@
                     const toggleButton = document.createElement('button');
                     const timerSpan = document.createElement('span');
                     timerSpan.classList.add('timer');
-                    const initialTime = timer || '00:00:00';
-                    timerSpan.textContent = `${initialTime}`;
+                    timerSpan.textContent = timer || '00:00:00';
 
-                    toggleButton.appendChild(document.createTextNode(userInfo));
+                    toggleButton.appendChild(document.createTextNode(userInfo || `Клиент ${clientId}`));
                     toggleButton.appendChild(timerSpan);
 
                     toggleButton.addEventListener('click', () => {
@@ -81,33 +103,23 @@
                         questionsDiv.style.display = (questionsDiv.style.display === 'none' || !questionsDiv.style.display) ? 'block' : 'none';
                     });
 
-                    let timeInSeconds = timeToSeconds(initialTime);
-                    if (!timers[clientId]) {
-                        setTimeout(() => {
-                            if (timerSpan.textContent === `${initialTime}`) {
-                                timers[clientId] = setInterval(() => {
-                                    if (timeInSeconds > 0) {
-                                        timeInSeconds--;
-                                        timerSpan.textContent = `${secondsToTime(timeInSeconds)}`;
-                                    } else {
-                                        clearInterval(timers[clientId]);
-                                        delete timers[clientId];
-                                    }
-                                }, 1000);
-                            }
-                        }, 2000);
-                    }
-
                     headerDiv.appendChild(toggleButton);
 
                     const questionsDiv = document.createElement('div');
                     questionsDiv.classList.add('questions');
+                    questionsDiv.style.display = 'none'; // По умолчанию скрыто
 
                     clientSection.appendChild(headerDiv);
                     clientSection.appendChild(questionsDiv);
                     clientsDiv.appendChild(clientSection);
 
                     clientsData[clientId] = questionsDiv;
+                } else {
+                    // Обновляем таймер, если он пришел в данных
+                    if (timer) {
+                        const timerSpan = clientSection.querySelector('.timer');
+                        timerSpan.textContent = timer;
+                    }
                 }
 
                 const uniqueId = `${clientId}-${qIndex}`;
@@ -126,10 +138,12 @@
                 if (questionImg) {
                     const questionImage = document.createElement('img');
                     questionImage.src = questionImg;
+                    questionImage.classList.add('question-img');
                     questionDiv.appendChild(questionImage);
                 }
 
                 const answersList = document.createElement('ul');
+                answersList.classList.add('answers');
                 answers.forEach(({ text, img }, varIndex) => {
                     const listItem = document.createElement('li');
                     const label = document.createElement('label');
@@ -171,10 +185,6 @@
             function removeClient(clientId) {
                 const clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
                 if (clientSection) {
-                    if (timers[clientId]) {
-                        clearInterval(timers[clientId]);
-                        delete timers[clientId];
-                    }
                     clientSection.remove();
                     delete clientsData[clientId];
                     console.log(`Клиент ${clientId} удален из интерфейса`);
@@ -212,30 +222,28 @@
                     return;
                 }
 
-                if (data.clientId && data.userInfo && (data.question || data.questionImg) && data.answers) {
+                if (data.type === 'timerUpdate') {
                     const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
                     if (clientSection) {
                         const timerSpan = clientSection.querySelector('.timer');
-                        if (timerSpan && data.timer && timerSpan.textContent !== `${data.timer}`) {
-                            timerSpan.textContent = `${data.timer}`;
-                            if (!timers[data.clientId]) {
-                                let timeInSeconds = timeToSeconds(data.timer);
-                                setTimeout(() => {
-                                    timers[data.clientId] = setInterval(() => {
-                                        if (timeInSeconds > 0) {
-                                            timeInSeconds--;
-                                            timerSpan.textContent = `${secondsToTime(timeInSeconds)}`;
-                                        } else {
-                                            clearInterval(timers[data.clientId]);
-                                            delete timers[data.clientId];
-                                        }
-                                    }, 1000);
-                                }, 2000);
-                            }
+                        if (timerSpan) {
+                            timerSpan.textContent = data.timer;
                         }
                     }
+                    return;
+                }
+
+                if (data.clientId && (data.question || data.questionImg) && data.answers) {
                     renderExam(data);
                 }
+            };
+
+            socket.onerror = (error) => {
+                console.error('Ошибка WebSocket:', error);
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket соединение закрыто');
             };
         }
     </script>

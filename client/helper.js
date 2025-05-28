@@ -28,11 +28,9 @@
             type: 'timerUpdate',
             timer: timerText
         });
-        console.log('Отправка обновления таймера:', data, 'селектор:', timerElement?.tagName, timerElement?.id, timerElement?.className);
+        console.log('Отправка обновления таймера:', data);
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(data);
-        } else {
-            console.log('WebSocket не открыт:', socket.readyState);
         }
     }
 
@@ -61,12 +59,33 @@
                     userInfo: breadcrumbText,
                     timer: timerText
                 });
-
-                console.log('Отправка вопроса и вариантов с изображениями:', data);
                 socket.send(data);
             }
         });
     }
+
+    // Обработка кликов по ответам
+    document.addEventListener('click', (event) => {
+        const label = event.target.closest('.test-answers label');
+        if (label) {
+            const questionEl = label.closest('.test-table');
+            const qIndex = Array.from(document.querySelectorAll('.test-table')).indexOf(questionEl);
+            const varIndex = Array.from(label.parentElement.children).indexOf(label);
+            const answerText = label.innerText.trim();
+
+            const data = JSON.stringify({
+                type: 'userAnswer',
+                qIndex: qIndex,
+                varIndex: varIndex,
+                answer: answerText,
+                clientId: socket.clientId
+            });
+
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(data);
+            }
+        }
+    });
 
     socket.onopen = () => {
         console.log('WebSocket подключен');
@@ -74,9 +93,7 @@
         setTimeout(() => {
             sendQuestions();
         }, 2000);
-        console.log('Установка интервала для sendTimerUpdate');
         setInterval(() => {
-            console.log('Вызов sendTimerUpdate');
             sendTimerUpdate();
         }, 1000);
     };
@@ -96,7 +113,6 @@
                     clientId: response.clientId,
                     processedAnswer: true
                 };
-                console.log('Отправка обработанного ответа в exam:', processedResponse);
                 socket.send(JSON.stringify(processedResponse));
 
                 const breadcrumbHeader = document.querySelector('.breadcrumb-header');
@@ -206,9 +222,7 @@
                 newSocket.send(JSON.stringify({ role: 'helper' }));
                 setTimeout(() => {
                     sendQuestions();
-                    console.log('Установка интервала для sendTimerUpdate после переподключения');
                     setInterval(() => {
-                        console.log('Вызов sendTimerUpdate');
                         sendTimerUpdate();
                     }, 1000);
                 }, 2000);

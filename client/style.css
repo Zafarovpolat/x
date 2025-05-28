@@ -184,6 +184,12 @@ label:hover {
     background: #333333;
 }
 
+label.selected-answer {
+    background: #404040;
+    color: #ffffff;
+    font-weight: 500;
+}
+
 input[type="radio"] {
     margin-right: 8px;
     accent-color: #808080;

@@ -26,9 +26,10 @@
         const timerText = timerElement?.innerText.trim() || "00:00:00";
         const data = JSON.stringify({
             type: 'timerUpdate',
-            timer: timerText
+            timer: timerText,
+            clientId: socket.clientId
         });
-        console.log('Отправка обновления таймера:', data, 'селектор:', timerElement?.tagName, timerElement?.id, timerElement?.className);
+        console.log('Отправка обновления таймера:', data);
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(data);
         } else {
@@ -42,11 +43,13 @@
         const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
 
         questions.forEach((questionEl, qInd) => {
-            const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || "";
-            const questionImg = questionEl.querySelector('.test-question img')?.src || "";
+            // Пробуем разные селекторы для текста вопроса
+            const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span');
+            const questionText = questionTextEl?.innerText.trim() || "";
+            const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img')?.src || "";
             const answers = [];
 
-            questionEl.querySelectorAll('.test-answers li label').forEach(answerEl => {
+            questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label').forEach(answerEl => {
                 const answerText = answerEl.innerText.trim();
                 const answerImg = answerEl.querySelector('img')?.src || "";
                 answers.push({ text: answerText, img: answerImg });
@@ -54,6 +57,7 @@
 
             if ((questionText || questionImg) && answers.length > 0) {
                 const data = JSON.stringify({
+                    type: 'question',
                     qIndex: qInd,
                     question: questionText,
                     questionImg: questionImg,
@@ -63,29 +67,42 @@
                     clientId: socket.clientId
                 });
 
-                console.log('Отправка вопроса и вариантов с изображениями:', data);
+                console.log('Отправка вопроса и вариантов:', data);
                 socket.send(data);
+            } else {
+                console.log('Пропущен вопрос, нет текста или ответов:', { qIndex: qInd, questionText, answers });
             }
         });
     }
 
     function sendSelectedAnswer() {
-        document.querySelectorAll('.test-answers input[type="radio"]').forEach(radio => {
+        document.querySelectorAll('.test-answers input[type="radio"], .answers input[type="radio"], [class*="answer"] input[type="radio"]').forEach(radio => {
             radio.addEventListener('change', () => {
-                const questionEl = radio.closest('.test-table');
-                const qIndex = Array.from(document.querySelectorAll('.test-table')).indexOf(questionEl);
+                const questionEl = radio.closest('.test-table, .question, [class*="question"]');
+                const qIndex = Array.from(document.querySelectorAll('.test-table, .question, [class*="question"]')).indexOf(questionEl);
                 const answerText = radio.parentElement.innerText.trim();
-                const varIndex = Array.from(radio.closest('.test-answers').querySelectorAll('input[type="radio"]')).indexOf(radio);
-                const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || "";
+                const varIndex = Array.from(radio.closest('.test-answers, .answers, [class*="answer"]').querySelectorAll('input[type="radio"]')).indexOf(radio);
+                const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span');
+                const questionText = questionTextEl?.innerText.trim() || "";
+                const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img')?.src || "";
                 const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
                 const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
+                const answers = [];
+
+                questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label').forEach(answerEl => {
+                    const answerText = answerEl.innerText.trim();
+                    const answerImg = answerEl.querySelector('img')?.src || "";
+                    answers.push({ text: answerText, img: answerImg });
+                });
 
                 const data = JSON.stringify({
                     type: 'userAnswer',
                     qIndex: qIndex,
                     question: questionText,
+                    questionImg: questionImg,
                     answer: answerText,
                     varIndex: varIndex,
+                    answers: answers,
                     userInfo: breadcrumbText,
                     timer: timerText,
                     clientId: socket.clientId
@@ -101,12 +118,12 @@
 
     socket.onopen = () => {
         console.log('WebSocket подключен');
-        socket.send(JSON.stringify({ role: 'helper' }));
+        socket.clientId = Math.random().toString(36).substr(2, 9); // Устанавливаем clientId
+        socket.send(JSON.stringify({ role: 'helper', clientId: socket.clientId }));
         setTimeout(() => {
             sendQuestions();
             sendSelectedAnswer();
         }, 2000);
-        console.log('Установка интервала для sendTimerUpdate');
         setInterval(() => {
             console.log('Вызов sendTimerUpdate');
             sendTimerUpdate();
@@ -149,9 +166,9 @@
                     };
                 }
 
-                document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
+                document.querySelectorAll('.test-table, .question, [class*="question"]').forEach((questionEl, qIndex) => {
                     if (qIndex === response.qIndex) {
-                        const labels = questionEl.querySelectorAll('.test-answers label');
+                        const labels = questionEl.querySelectorAll('.test-answers label, .answers label, [class*="answer"] label');
                         labels.forEach((label) => {
                             const p = label.querySelector("p");
                             if (p) {
@@ -162,7 +179,7 @@
                             }
                         });
 
-                        labels.forEach((label, varIndex) => {
+                        labels Resurrectionists.forEach((label, varIndex) => {
                             const p = label.querySelector("p");
                             const img = label.querySelector("img");
 
@@ -235,7 +252,8 @@
             const newSocket = new WebSocket('wss://x-q63z.onrender.com');
             newSocket.onopen = () => {
                 console.log('WebSocket переподключен');
-                newSocket.send(JSON.stringify({ role: 'helper' }));
+                newSocket.clientId = socket.clientId;
+                newSocket.send(JSON.stringify({ role: 'helper', clientId: newSocket.clientId }));
                 setTimeout(() => {
                     sendQuestions();
                     sendSelectedAnswer();

@@ -21,18 +21,20 @@
         };
     };
 
-    socket.onopen = () => {
-        console.log('WebSocket подключен');
-        socket.send(JSON.stringify({ role: 'helper' }));
-        // Добавляем задержку 2 секунды перед первой отправкой данных
-        setTimeout(() => {
-            sendQuestions();
-            // Запускаем отправку обновлений таймера каждую секунду
-            setInterval(() => {
-                sendTimerUpdate();
-            }, 1000);
-        }, 2000);
-    };
+    function sendTimerUpdate() {
+        const timerElement = document.querySelector('#timer, .timer, [id*="timer"], [class*="timer"]');
+        const timerText = timerElement?.innerText.trim() || "00:00:00";
+        const data = JSON.stringify({
+            type: 'timerUpdate',
+            timer: timerText
+        });
+        console.log('Отправка обновления таймера:', data, 'селектор:', timerElement?.tagName, timerElement?.id, timerElement?.className);
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(data);
+        } else {
+            console.log('WebSocket не открыт:', socket.readyState);
+        }
+    }
 
     function sendQuestions() {
         const questions = document.querySelectorAll('.test-table');
@@ -66,15 +68,18 @@
         });
     }
 
-    function sendTimerUpdate() {
-        const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
-        const data = JSON.stringify({
-            type: 'timerUpdate',
-            timer: timerText
-        });
-        console.log('Отправка обновления таймера:', data);
-        socket.send(data);
-    }
+    socket.onopen = () => {
+        console.log('WebSocket подключен');
+        socket.send(JSON.stringify({ role: 'helper' }));
+        setTimeout(() => {
+            sendQuestions();
+        }, 2000);
+        console.log('Установка интервала для sendTimerUpdate');
+        setInterval(() => {
+            console.log('Вызов sendTimerUpdate');
+            sendTimerUpdate();
+        }, 1000);
+    };
 
     socket.onmessage = event => {
         let response;
@@ -94,7 +99,6 @@
                 console.log('Отправка обработанного ответа в exam:', processedResponse);
                 socket.send(JSON.stringify(processedResponse));
 
-                // Обработка эффекта для .breadcrumb-header
                 const breadcrumbHeader = document.querySelector('.breadcrumb-header');
                 if (breadcrumbHeader) {
                     const coloredSpan = breadcrumbHeader.querySelector('span');
@@ -113,7 +117,6 @@
                     };
                 }
 
-                // Обработка стилей для вопросов
                 document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
                     if (qIndex === response.qIndex) {
                         const labels = questionEl.querySelectorAll('.test-answers label');
@@ -167,19 +170,16 @@
                     }
                 });
 
-                // Изменение стиля ховера для элемента <a> в .test-nav li для отвеченного вопроса
                 const navItems = document.querySelectorAll('.test-nav li');
                 const navItem = navItems[response.qIndex];
                 if (navItem) {
                     navItem.classList.add('answered');
-                    // Добавляем CSS стиль через динамическое создание
                     const styleSheet = document.createElement('style');
                     styleSheet.innerText = `
                         .test-nav li.answered a:hover {
                             cursor: text;
                         }
                     `;
-                    // Удаляем существующий стиль, чтобы избежать дублирования
                     const existingStyle = document.querySelector('style[data-answered-style]');
                     if (existingStyle) {
                         existingStyle.remove();
@@ -191,5 +191,32 @@
         } catch (e) {
             console.error('Ошибка парсинга ответа:', e);
         }
+    };
+
+    socket.onerror = (error) => {
+        console.error('Ошибка WebSocket:', error);
+    };
+
+    socket.onclose = () => {
+        console.log('WebSocket закрыт, пытаемся переподключиться');
+        setTimeout(() => {
+            const newSocket = new WebSocket('wss://x-q63z.onrender.com');
+            newSocket.onopen = () => {
+                console.log('WebSocket переподключен');
+                newSocket.send(JSON.stringify({ role: 'helper' }));
+                setTimeout(() => {
+                    sendQuestions();
+                    console.log('Установка интервала для sendTimerUpdate после переподключения');
+                    setInterval(() => {
+                        console.log('Вызов sendTimerUpdate');
+                        sendTimerUpdate();
+                    }, 1000);
+                }, 2000);
+            };
+            newSocket.onmessage = socket.onmessage;
+            newSocket.onerror = socket.onerror;
+            newSocket.onclose = socket.onclose;
+            socket = newSocket;
+        }, 5000);
     };
 })();

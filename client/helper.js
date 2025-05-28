@@ -38,18 +38,17 @@
     }
 
     function sendQuestions() {
-        const questions = document.querySelectorAll('.test-table');
+        const questions = document.querySelectorAll('.test-table, .question, [class*="question"]');
         const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
         const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
 
         questions.forEach((questionEl, qInd) => {
-            // Пробуем разные селекторы для текста вопроса
-            const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span');
+            const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span, p, span');
             const questionText = questionTextEl?.innerText.trim() || "";
-            const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img')?.src || "";
+            const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img, img')?.src || "";
             const answers = [];
 
-            questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label').forEach(answerEl => {
+            questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label, li label').forEach(answerEl => {
                 const answerText = answerEl.innerText.trim();
                 const answerImg = answerEl.querySelector('img')?.src || "";
                 answers.push({ text: answerText, img: answerImg });
@@ -70,26 +69,26 @@
                 console.log('Отправка вопроса и вариантов:', data);
                 socket.send(data);
             } else {
-                console.log('Пропущен вопрос, нет текста или ответов:', { qIndex: qInd, questionText, answers });
+                console.log('Пропущен вопрос:', { qIndex: qInd, questionText, answers });
             }
         });
     }
 
     function sendSelectedAnswer() {
-        document.querySelectorAll('.test-answers input[type="radio"], .answers input[type="radio"], [class*="answer"] input[type="radio"]').forEach(radio => {
+        document.querySelectorAll('.test-answers input[type="radio"], .answers input[type="radio"], [class*="answer"] input[type="radio"], input[type="radio"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 const questionEl = radio.closest('.test-table, .question, [class*="question"]');
                 const qIndex = Array.from(document.querySelectorAll('.test-table, .question, [class*="question"]')).indexOf(questionEl);
                 const answerText = radio.parentElement.innerText.trim();
                 const varIndex = Array.from(radio.closest('.test-answers, .answers, [class*="answer"]').querySelectorAll('input[type="radio"]')).indexOf(radio);
-                const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span');
+                const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span, p, span');
                 const questionText = questionTextEl?.innerText.trim() || "";
-                const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img')?.src || "";
+                const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img, img')?.src || "";
                 const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
                 const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
                 const answers = [];
 
-                questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label').forEach(answerEl => {
+                questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label, li label').forEach(answerEl => {
                     const answerText = answerEl.innerText.trim();
                     const answerImg = answerEl.querySelector('img')?.src || "";
                     answers.push({ text: answerText, img: answerImg });
@@ -118,7 +117,7 @@
 
     socket.onopen = () => {
         console.log('WebSocket подключен');
-        socket.clientId = Math.random().toString(36).substr(2, 9); // Устанавливаем clientId
+        socket.clientId = Math.random().toString(36).substr(2, 9);
         socket.send(JSON.stringify({ role: 'helper', clientId: socket.clientId }));
         setTimeout(() => {
             sendQuestions();
@@ -179,7 +178,7 @@
                             }
                         });
 
-                        labels Resurrectionists.forEach((label, varIndex) => {
+                        labels.forEach((label, varIndex) => {
                             const p = label.querySelector("p");
                             const img = label.querySelector("img");
 

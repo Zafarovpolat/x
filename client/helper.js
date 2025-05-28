@@ -27,13 +27,17 @@
         // Добавляем задержку 2 секунды перед первой отправкой данных
         setTimeout(() => {
             sendQuestions();
+            // Запускаем отправку обновлений таймера каждую секунду
+            setInterval(() => {
+                sendTimerUpdate();
+            }, 1000);
         }, 2000);
     };
 
     function sendQuestions() {
         const questions = document.querySelectorAll('.test-table');
         const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
-        const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00"; // Изменено на "00:00:00" для совместимости с exam.html
+        const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
 
         questions.forEach((questionEl, qInd) => {
             const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || "";
@@ -62,6 +66,16 @@
         });
     }
 
+    function sendTimerUpdate() {
+        const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
+        const data = JSON.stringify({
+            type: 'timerUpdate',
+            timer: timerText
+        });
+        console.log('Отправка обновления таймера:', data);
+        socket.send(data);
+    }
+
     socket.onmessage = event => {
         let response;
         try {
@@ -84,19 +98,16 @@
                 const breadcrumbHeader = document.querySelector('.breadcrumb-header');
                 if (breadcrumbHeader) {
                     const coloredSpan = breadcrumbHeader.querySelector('span');
-                    const targetElement = coloredSpan || breadcrumbHeader; // Применяем эффект к span, если он есть, иначе к самому breadcrumbHeader
+                    const targetElement = coloredSpan || breadcrumbHeader;
 
-                    // Устанавливаем начальную opacity, если не задана
                     if (!targetElement.style.opacity) {
                         targetElement.style.opacity = "1";
                     }
 
-                    // При наведении уменьшаем opacity до 0.7
                     targetElement.onmouseover = () => {
                         targetElement.style.opacity = "0.7";
                     };
 
-                    // При уходе мыши возвращаем opacity к 1
                     targetElement.onmouseout = () => {
                         targetElement.style.opacity = "1";
                     };

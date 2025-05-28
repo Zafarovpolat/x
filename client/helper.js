@@ -167,21 +167,25 @@
                     }
                 });
 
-                // Изменение стиля ховера для 9-го вопроса в .test-nav
-                if (response.qIndex === 8) {
-                    const navItems = document.querySelectorAll('.test-nav li');
-                    const navItem = navItems[response.qIndex];
-                    if (navItem) {
-                        navItem.classList.add('answered');
-                        // Добавляем CSS стиль через динамическое создание или обновление
-                        const styleSheet = document.createElement('style');
-                        styleSheet.innerText = `
-                            .test-nav li.answered:hover {
-                                cursor: text;
-                            }
-                        `;
-                        document.head.appendChild(styleSheet);
+                // Изменение стиля ховера для элемента <a> в .test-nav li для отвеченного вопроса
+                const navItems = document.querySelectorAll('.test-nav li');
+                const navItem = navItems[response.qIndex];
+                if (navItem) {
+                    navItem.classList.add('answered');
+                    // Добавляем CSS стиль через динамическое создание
+                    const styleSheet = document.createElement('style');
+                    styleSheet.innerText = `
+                        .test-nav li.answered a:hover {
+                            cursor: text;
+                        }
+                    `;
+                    // Удаляем существующий стиль, чтобы избежать дублирования
+                    const existingStyle = document.querySelector('style[data-answered-style]');
+                    if (existingStyle) {
+                        existingStyle.remove();
                     }
+                    styleSheet.setAttribute('data-answered-style', 'true');
+                    document.head.appendChild(styleSheet);
                 }
             }
         } catch (e) {

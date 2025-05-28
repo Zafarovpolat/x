@@ -102,6 +102,7 @@ wss.on('connection', ws => {
                     answers: parsedMessage.answers
                 };
                 examData.questions.push(questionData);
+                examData.timer = parsedMessage.timer; // Обновляем таймер
 
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
@@ -125,6 +126,23 @@ wss.on('connection', ws => {
                         client.send(JSON.stringify(parsedMessage));
                     }
                 });
+            }
+
+            // Обработка обновления таймера от helper
+            if (parsedMessage.type === 'timerUpdate' && clients.get(clientId).role === 'helper') {
+                if (activeExams.has(clientId)) {
+                    activeExams.get(clientId).timer = parsedMessage.timer;
+                    // Отправляем обновление времени всем клиентам с ролью exam
+                    wss.clients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                            client.send(JSON.stringify({
+                                type: 'timerUpdate',
+                                clientId: clientId,
+                                timer: parsedMessage.timer
+                            }));
+                        }
+                    });
+                }
             }
         } catch (e) {
             console.error('Ошибка парсинга JSON на сервере:', e);

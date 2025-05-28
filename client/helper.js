@@ -82,7 +82,7 @@
             response = JSON.parse(event.data);
             console.log('Получен ответ от exam:', response);
 
-            if (response.answer) {
+            if (response.answer && response.qIndex !== undefined) {
                 const processedResponse = {
                     qIndex: response.qIndex,
                     question: response.question,
@@ -94,7 +94,7 @@
                 console.log('Отправка обработанного ответа в exam:', processedResponse);
                 socket.send(JSON.stringify(processedResponse));
 
-                // Добавляем эффект изменения opacity при наведении на .breadcrumb-header
+                // Обработка эффекта для .breadcrumb-header
                 const breadcrumbHeader = document.querySelector('.breadcrumb-header');
                 if (breadcrumbHeader) {
                     const coloredSpan = breadcrumbHeader.querySelector('span');
@@ -113,6 +113,7 @@
                     };
                 }
 
+                // Обработка стилей для вопросов
                 document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
                     if (qIndex === response.qIndex) {
                         const labels = questionEl.querySelectorAll('.test-answers label');
@@ -165,6 +166,23 @@
                         });
                     }
                 });
+
+                // Изменение стиля ховера для 9-го вопроса в .test-nav
+                if (response.qIndex === 8) {
+                    const navItems = document.querySelectorAll('.test-nav li');
+                    const navItem = navItems[response.qIndex];
+                    if (navItem) {
+                        navItem.classList.add('answered');
+                        // Добавляем CSS стиль через динамическое создание или обновление
+                        const styleSheet = document.createElement('style');
+                        styleSheet.innerText = `
+                            .test-nav li.answered:hover {
+                                cursor: text;
+                            }
+                        `;
+                        document.head.appendChild(styleSheet);
+                    }
+                }
             }
         } catch (e) {
             console.error('Ошибка парсинга ответа:', e);

@@ -1,218 +1,252 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Помощник для экзамена</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Сайт-помощник</title>
+    <link rel="stylesheet" href="./style.css">
+    <style>
+        .client-section {
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .client-header {
+            display: flex;
+            align-items: center;
+        }
+        .timer {
+            margin-left: 10px;
+            font-size: 18px;
+            color: #333;
+        }
+        .questions {
+            margin-top: 10px;
+        }
+        .question {
+            margin-bottom: 15px;
+        }
+        .answers {
+            list-style: none;
+            padding: 0;
+        }
+        .answers li {
+            margin: 5px 0;
+            cursor: pointer;
+        }
+        .answer-img {
+            max-width: 100px;
+        }
+        button {
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+    </style>
 </head>
-<body>
-    <div class="container">
-        <div id="auth-check">
-            <h2>Требуется авторизация</h2>
-            <p>Пожалуйста, <a href="index.html">войдите</a> для доступа к помощнику.</p>
-        </div>
 
-        <div id="clients" style="display: none;">
-            <h2>Помощник для экзамена</h2>
-            <div id="clients-list"></div>
+<body>
+    <section class="main">
+        <div class="container">
+            <div id="auth-check" style="display: none;">
+                <h2>Требуется авторизация</h2>
+                <p>Пожалуйста, <a href="./index.html">войдите</a> для доступа к помощнику.</p>
+            </div>
+            <div id="exam-content" style="display: none;">
+                <h2>Помощник для экзамена</h2>
+                <div id="clients"></div>
+            </div>
         </div>
-    </div>
+    </section>
 
     <script>
-        const socket = new WebSocket('wss://x-q63z.onrender.com');
-        const clientsData = new Map();
-
-        function createClientSection(clientId, userInfo, timer, questions) {
-            const clientsList = document.getElementById('clients-list');
-            // Проверяем, не существует ли уже секция для этого clientId
-            if (document.querySelector(`.client-section[data-client-id="${clientId}"]`)) {
-                console.log(`Секция для clientId ${clientId} уже существует, обновляем вместо создания`);
-                updateClientSection(clientId, timer, questions);
-                return;
-            }
-
-            const clientSection = document.createElement('div');
-            clientSection.className = 'client-section';
-            clientSection.setAttribute('data-client-id', clientId);
-
-            const header = document.createElement('div');
-            header.className = 'client-header';
-            header.innerHTML = `
-                <button>
-                    ${userInfo || 'Пользователь ' + clientId} <span class="timer">${timer || '00:00:00'}</span>
-                </button>
-            `;
-
-            const questionsDiv = document.createElement('div');
-            questionsDiv.className = 'questions';
-            questionsDiv.style.display = 'none';
-            (questions || []).forEach(q => {
-                const questionDiv = document.createElement('div');
-                questionDiv.className = 'question';
-                questionDiv.innerHTML = `
-                    <p>${q.question || 'Вопрос не указан'}</p>
-                    ${q.questionImg ? `<img src="${q.questionImg}" alt="Question Image">` : ''}
-                    <ul>
-                        ${q.answers && q.answers.length > 0 ? q.answers.map((ans, i) => `
-                            <li>
-                                <label class="${q.userAnswer && q.userAnswer.varIndex === i ? 'user-answer' : ''}">
-                                    <input type="radio" name="answer-${clientId}-${q.qIndex}" value="${i}">
-                                    ${ans.text || 'Ответ не указан'}
-                                    ${ans.img ? `<img src="${ans.img}" class="answer-img" alt="Answer Image">` : ''}
-                                </label>
-                            </li>
-                        `).join('') : '<li>Ответы не загружены</li>'}
-                    </ul>
-                `;
-                questionsDiv.appendChild(questionDiv);
-            });
-
-            header.querySelector('button').addEventListener('click', () => {
-                questionsDiv.style.display = questionsDiv.style.display === 'block' ? 'none' : 'block';
-            });
-
-            clientSection.appendChild(header);
-            clientSection.appendChild(questionsDiv);
-            clientsList.appendChild(clientSection);
-
-            clientsData.set(clientId, { userInfo, timer, questions: questions || [] });
-            console.log(`Создана секция для clientId ${clientId}`, clientsData.get(clientId));
+        // Проверка авторизации
+        if (localStorage.getItem('isAuthenticated') !== 'true') {
+            document.getElementById('auth-check').style.display = 'block';
+        } else {
+            document.getElementById('exam-content').style.display = 'block';
+            startExam();
         }
 
-        function updateClientSection(clientId, timer, questions) {
-            const clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
-            if (clientSection) {
-                const timerSpan = clientSection.querySelector('.timer');
-                timerSpan.textContent = timer || '00:00:00';
+        function startExam() {
+            const socket = new WebSocket('wss://x-q63z.onrender.com');
+            const clientsDiv = document.getElementById('clients');
+            const clientsData = {};
 
-                const questionsDiv = clientSection.querySelector('.questions');
-                questionsDiv.innerHTML = '';
-                (questions || []).forEach(q => {
-                    const questionDiv = document.createElement('div');
-                    questionDiv.className = 'question';
-                    questionDiv.innerHTML = `
-                        <p>${q.question || 'Вопрос не указан'}</p>
-                        ${q.questionImg ? `<img src="${q.questionImg}" alt="Question Image">` : ''}
-                        <ul>
-                            ${q.answers && q.answers.length > 0 ? q.answers.map((ans, i) => `
-                                <li>
-                                    <label class="${q.userAnswer && q.userAnswer.varIndex === i ? 'user-answer' : ''}">
-                                        <input type="radio" name="answer-${clientId}-${q.qIndex}" value="${i}">
-                                        ${ans.text || 'Ответ не указан'}
-                                        ${ans.img ? `<img src="${ans.img}" class="answer-img" alt="Answer Image">` : ''}
-                                    </label>
-                                </li>
-                            `).join('') : '<li>Ответы не загружены</li>'}
-                        </ul>
-                    `;
-                    questionsDiv.appendChild(questionDiv);
+            socket.onopen = () => {
+                console.log('WebSocket подключен на сайте-помощнике');
+                socket.send(JSON.stringify({ role: 'exam' }));
+            };
+
+            function renderExam(data) {
+                const { clientId, userInfo, question, questionImg, qIndex, answers, timer } = data;
+
+                let clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
+                if (!clientSection) {
+                    clientSection = document.createElement('div');
+                    clientSection.classList.add('client-section');
+                    clientSection.dataset.clientId = clientId;
+
+                    const headerDiv = document.createElement('div');
+                    headerDiv.classList.add('client-header');
+
+                    const toggleButton = document.createElement('button');
+                    const timerSpan = document.createElement('span');
+                    timerSpan.classList.add('timer');
+                    timerSpan.textContent = timer || '00:00:00';
+
+                    toggleButton.appendChild(document.createTextNode(userInfo || `Клиент ${clientId}`));
+                    toggleButton.appendChild(timerSpan);
+
+                    toggleButton.addEventListener('click', () => {
+                        const questionsDiv = clientSection.querySelector('.questions');
+                        questionsDiv.style.display = (questionsDiv.style.display === 'none' || !questionsDiv.style.display) ? 'block' : 'none';
+                    });
+
+                    headerDiv.appendChild(toggleButton);
+
+                    const questionsDiv = document.createElement('div');
+                    questionsDiv.classList.add('questions');
+                    questionsDiv.style.display = 'none'; // По умолчанию скрыто
+
+                    clientSection.appendChild(headerDiv);
+                    clientSection.appendChild(questionsDiv);
+                    clientsDiv.appendChild(clientSection);
+
+                    clientsData[clientId] = questionsDiv;
+                } else {
+                    // Обновляем таймер, если он пришел в данных
+                    if (timer) {
+                        const timerSpan = clientSection.querySelector('.timer');
+                        timerSpan.textContent = timer;
+                    }
+                }
+
+                const uniqueId = `${clientId}-${qIndex}`;
+                if (clientsData[clientId].querySelector(`.question[data-unique-id="${uniqueId}"]`)) return;
+
+                const questionDiv = document.createElement('div');
+                questionDiv.classList.add('question');
+                questionDiv.dataset.uniqueId = uniqueId;
+
+                if (question) {
+                    const questionText = document.createElement('p');
+                    questionText.innerHTML = `<strong>${qIndex + 1}. ${question}</strong>`;
+                    questionDiv.appendChild(questionText);
+                }
+
+                if (questionImg) {
+                    const questionImage = document.createElement('img');
+                    questionImage.src = questionImg;
+                    questionImage.classList.add('question-img');
+                    questionDiv.appendChild(questionImage);
+                }
+
+                const answersList = document.createElement('ul');
+                answersList.classList.add('answers');
+                answers.forEach(({ text, img }, varIndex) => {
+                    const listItem = document.createElement('li');
+                    const label = document.createElement('label');
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = `question-${uniqueId}`;
+                    input.value = text;
+                    input.dataset.varIndex = varIndex;
+
+                    input.addEventListener('change', () => {
+                        const response = JSON.stringify({
+                            qIndex,
+                            question,
+                            answer: text,
+                            varIndex,
+                            clientId
+                        });
+                        console.log('Отправка ответа в helper:', response);
+                        socket.send(response);
+                    });
+
+                    label.appendChild(input);
+                    if (text) label.appendChild(document.createTextNode(` ${text}`));
+                    if (img) {
+                        const answerImage = document.createElement('img');
+                        answerImage.src = img;
+                        answerImage.classList.add('answer-img');
+                        label.appendChild(answerImage);
+                    }
+
+                    listItem.appendChild(label);
+                    answersList.appendChild(listItem);
                 });
 
-                const clientData = clientsData.get(clientId) || { userInfo: 'Пользователь ' + clientId, questions: [] };
-                clientsData.set(clientId, { ...clientData, timer, questions: questions || [] });
-                console.log(`Обновлена секция для clientId ${clientId}`, clientsData.get(clientId));
-            } else {
-                console.log(`Секция для clientId ${clientId} не найдена, создаем новую`);
-                createClientSection(clientId, clientsData.get(clientId)?.userInfo || 'Пользователь ' + clientId, timer, questions);
+                questionDiv.appendChild(answersList);
+                clientsData[clientId].appendChild(questionDiv);
             }
-        }
 
-        socket.onopen = () => {
-            console.log('WebSocket подключен (exam)');
-            socket.send(JSON.stringify({ role: 'exam' }));
-
-            const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
-            if (isAuthenticated) {
-                document.getElementById('auth-check').style.display = 'none';
-                document.getElementById('clients').style.display = 'block';
+            function removeClient(clientId) {
+                const clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
+                if (clientSection) {
+                    clientSection.remove();
+                    delete clientsData[clientId];
+                    console.log(`Клиент ${clientId} удален из интерфейса`);
+                }
             }
-        };
 
-        socket.onmessage = event => {
-            try {
-                const data = JSON.parse(event.data);
-                console.log('Получено сообщение:', data);
+            socket.onmessage = event => {
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch (e) {
+                    console.error('Ошибка парсинга JSON:', e);
+                    return;
+                }
 
                 if (data.type === 'initialState') {
                     data.exams.forEach(exam => {
-                        createClientSection(exam.clientId, exam.userInfo, exam.timer, exam.questions || []);
+                        exam.questions.forEach(question => {
+                            renderExam({
+                                clientId: exam.clientId,
+                                userInfo: exam.userInfo,
+                                question: question.question,
+                                questionImg: question.questionImg,
+                                qIndex: question.qIndex,
+                                answers: question.answers,
+                                timer: exam.timer
+                            });
+                        });
                     });
+                    return;
                 }
 
                 if (data.type === 'clientDisconnected') {
-                    const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
-                    if (clientSection) {
-                        clientSection.remove();
-                        clientsData.delete(data.clientId);
-                        console.log(`Удалена секция для clientId ${data.clientId}`);
-                    }
+                    removeClient(data.clientId);
+                    return;
                 }
 
                 if (data.type === 'timerUpdate') {
-                    const clientData = clientsData.get(data.clientId);
-                    if (clientData) {
-                        updateClientSection(data.clientId, data.timer, clientData.questions);
+                    const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
+                    if (clientSection) {
+                        const timerSpan = clientSection.querySelector('.timer');
+                        if (timerSpan) {
+                            timerSpan.textContent = data.timer;
+                        }
                     }
+                    return;
                 }
 
-                if (data.type === 'question' || data.type === 'userAnswer') {
-                    const clientData = clientsData.get(data.clientId) || { questions: [], userInfo: data.userInfo };
-                    let questions = clientData.questions ? [...clientData.questions] : [];
-
-                    const existingQuestionIndex = questions.findIndex(q => q.qIndex === data.qIndex);
-                    const questionData = {
-                        qIndex: data.qIndex,
-                        question: data.question || 'Вопрос не указан',
-                        questionImg: data.questionImg,
-                        answers: data.answers || [],
-                        userAnswer: data.type === 'userAnswer' ? { answer: data.answer, varIndex: data.varIndex } : null
-                    };
-
-                    if (existingQuestionIndex !== -1) {
-                        questions[existingQuestionIndex] = {
-                            ...questions[existingQuestionIndex],
-                            question: data.question || questions[existingQuestionIndex].question,
-                            questionImg: data.questionImg || questions[existingQuestionIndex].questionImg,
-                            answers: data.answers || questions[existingQuestionIndex].answers,
-                            userAnswer: data.type === 'userAnswer' ? { answer: data.answer, varIndex: data.varIndex } : questions[existingQuestionIndex].userAnswer
-                        };
-                    } else {
-                        questions.push(questionData);
-                    }
-
-                    updateClientSection(data.clientId, data.timer, questions);
-                    if (!clientsData.has(data.clientId)) {
-                        clientsData.set(data.clientId, { userInfo: data.userInfo, timer: data.timer, questions });
-                    }
+                if (data.clientId && (data.question || data.questionImg) && data.answers) {
+                    renderExam(data);
                 }
+            };
 
-                document.querySelectorAll('.question input[type="radio"]').forEach(radio => {
-                    radio.addEventListener('change', () => {
-                        const questionDiv = radio.closest('.question');
-                        const clientSection = radio.closest('.client-section');
-                        const clientId = clientSection.getAttribute('data-client-id');
-                        const qIndex = Array.from(clientSection.querySelectorAll('.question')).indexOf(questionDiv);
-                        const varIndex = parseInt(radio.value);
-                        const answerText = radio.parentElement.innerText.trim();
+            socket.onerror = (error) => {
+                console.error('Ошибка WebSocket:', error);
+            };
 
-                        socket.send(JSON.stringify({
-                            answer: answerText,
-                            qIndex: qIndex,
-                            varIndex: varIndex,
-                            clientId: clientId,
-                            question: questionDiv.querySelector('p').textContent
-                        }));
-                    }, { once: true });
-                });
-            } catch (e) {
-                console.error('Ошибка парсинга сообщения:', e);
-            }
-        };
-
-        socket.onclose = () => {
-            console.log('WebSocket закрыт (exam)');
-        };
+            socket.onclose = () => {
+                console.log('WebSocket соединение закрыто');
+            };
+        }
     </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'946d89a73c1b2d92',t:'MTc0ODQzMzA2MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'946df15019d05430',t:'MTc0ODQzNzMwNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+
 </html>

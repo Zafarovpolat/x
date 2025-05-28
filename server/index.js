@@ -88,9 +88,7 @@ wss.on('connection', ws => {
             }
 
             // Обработка вопроса от helper
-            if ((parsedMessage.question || parsedMessage.questionImg) && clients.get(clientId).role === 'helper') {
-                parsedMessage.clientId = clientId;
-
+            if (parsedMessage.type === 'question' && clients.get(clientId).role === 'helper') {
                 if (!activeExams.has(clientId)) {
                     activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer });
                 }
@@ -101,7 +99,14 @@ wss.on('connection', ws => {
                     questionImg: parsedMessage.questionImg,
                     answers: parsedMessage.answers
                 };
-                examData.questions.push(questionData);
+                const existingQuestion = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
+                if (!existingQuestion) {
+                    examData.questions.push(questionData);
+                } else {
+                    existingQuestion.question = parsedMessage.question;
+                    existingQuestion.questionImg = parsedMessage.questionImg;
+                    existingQuestion.answers = parsedMessage.answers;
+                }
                 examData.timer = parsedMessage.timer;
 
                 wss.clients.forEach(client => {
@@ -113,43 +118,46 @@ wss.on('connection', ws => {
 
             // Обработка ответа пользователя от helper
             if (parsedMessage.type === 'userAnswer' && clients.get(clientId).role === 'helper') {
-                if (activeExams.has(clientId)) {
-                    const examData = activeExams.get(clientId);
-                    const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
-                    if (question) {
-                        question.userAnswer = {
+                if (!activeExams.has(clientId)) {
+                    activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer });
+                }
+                const examData = activeExams.get(clientId);
+                const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
+                if (question) {
+                    question.userAnswer = {
+                        answer: parsedMessage.answer,
+                        varIndex: parsedMessage.varIndex
+                    };
+                } else {
+                    examData.questions.push({
+                        qIndex: parsedMessage.qIndex,
+                        question: parsedMessage.question,
+                        questionImg: parsedMessage.questionImg,
+                        answers: parsedMessage.answers || [],
+                        userAnswer: {
                             answer: parsedMessage.answer,
                             varIndex: parsedMessage.varIndex
-                        };
-                    } else {
-                        examData.questions.push({
-                            qIndex: parsedMessage.qIndex,
-                            question: parsedMessage.question,
-                            questionImg: parsedMessage.questionImg,
-                            answers: parsedMessage.answers,
-                            userAnswer: {
-                                answer: parsedMessage.answer,
-                                varIndex: parsedMessage.varIndex
-                            }
-                        });
-                    }
-                    examData.timer = parsedMessage.timer;
-
-                    wss.clients.forEach(client => {
-                        if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
-                            client.send(JSON.stringify({
-                                type: 'userAnswer',
-                                clientId: clientId,
-                                qIndex: parsedMessage.qIndex,
-                                question: parsedMessage.question,
-                                answer: parsedMessage.answer,
-                                varIndex: parsedMessage.varIndex,
-                                userInfo: parsedMessage.userInfo,
-                                timer: parsedMessage.timer
-                            }));
                         }
                     });
                 }
+                examData.timer = parsedMessage.timer;
+
+                wss.clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                        client.send(JSON.stringify({
+                            type: 'userAnswer',
+                            clientId: clientId,
+                            qIndex: parsedMessage.qIndex,
+                            question: parsedMessage.question,
+                            questionImg: parsedMessage.questionImg,
+                            answer: parsedMessage.answer,
+                            varIndex: parsedMessage.varIndex,
+                            answers: parsedMessage.answers || [],
+                            userInfo: parsedMessage.userInfo,
+                            timer: parsedMessage.timer
+                        }));
+                    }
+                });
             }
 
             // Ответ от exam отправляем конкретному helper

@@ -25,6 +25,13 @@
 
         function createClientSection(clientId, userInfo, timer, questions) {
             const clientsList = document.getElementById('clients-list');
+            // Проверяем, не существует ли уже секция для этого clientId
+            if (document.querySelector(`.client-section[data-client-id="${clientId}"]`)) {
+                console.log(`Секция для clientId ${clientId} уже существует, обновляем вместо создания`);
+                updateClientSection(clientId, timer, questions);
+                return;
+            }
+
             const clientSection = document.createElement('div');
             clientSection.className = 'client-section';
             clientSection.setAttribute('data-client-id', clientId);
@@ -33,14 +40,14 @@
             header.className = 'client-header';
             header.innerHTML = `
                 <button>
-                    ${userInfo || 'Пользователь ' + clientId} <span class="timer">${timer}</span>
+                    ${userInfo || 'Пользователь ' + clientId} <span class="timer">${timer || '00:00:00'}</span>
                 </button>
             `;
 
             const questionsDiv = document.createElement('div');
             questionsDiv.className = 'questions';
-            questionsDiv.style.display = 'none'; // Скрываем по умолчанию
-            questions.forEach(q => {
+            questionsDiv.style.display = 'none';
+            (questions || []).forEach(q => {
                 const questionDiv = document.createElement('div');
                 questionDiv.className = 'question';
                 questionDiv.innerHTML = `
@@ -50,7 +57,7 @@
                         ${q.answers && q.answers.length > 0 ? q.answers.map((ans, i) => `
                             <li>
                                 <label class="${q.userAnswer && q.userAnswer.varIndex === i ? 'user-answer' : ''}">
-                                    <input type="radio" name="answer-${clientId}-${q.qIndex}" value="${i}" ${q.userAnswer && q.userAnswer.varIndex === i ? 'checked' : ''}>
+                                    <input type="radio" name="answer-${clientId}-${q.qIndex}" value="${i}">
                                     ${ans.text || 'Ответ не указан'}
                                     ${ans.img ? `<img src="${ans.img}" class="answer-img" alt="Answer Image">` : ''}
                                 </label>
@@ -69,18 +76,19 @@
             clientSection.appendChild(questionsDiv);
             clientsList.appendChild(clientSection);
 
-            clientsData.set(clientId, { userInfo, timer, questions });
+            clientsData.set(clientId, { userInfo, timer, questions: questions || [] });
+            console.log(`Создана секция для clientId ${clientId}`, clientsData.get(clientId));
         }
 
         function updateClientSection(clientId, timer, questions) {
             const clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
             if (clientSection) {
                 const timerSpan = clientSection.querySelector('.timer');
-                timerSpan.textContent = timer;
+                timerSpan.textContent = timer || '00:00:00';
 
                 const questionsDiv = clientSection.querySelector('.questions');
                 questionsDiv.innerHTML = '';
-                questions.forEach(q => {
+                (questions || []).forEach(q => {
                     const questionDiv = document.createElement('div');
                     questionDiv.className = 'question';
                     questionDiv.innerHTML = `
@@ -90,7 +98,7 @@
                             ${q.answers && q.answers.length > 0 ? q.answers.map((ans, i) => `
                                 <li>
                                     <label class="${q.userAnswer && q.userAnswer.varIndex === i ? 'user-answer' : ''}">
-                                        <input type="radio" name="answer-${clientId}-${q.qIndex}" value="${i}" ${q.userAnswer && q.userAnswer.varIndex === i ? 'checked' : ''}>
+                                        <input type="radio" name="answer-${clientId}-${q.qIndex}" value="${i}">
                                         ${ans.text || 'Ответ не указан'}
                                         ${ans.img ? `<img src="${ans.img}" class="answer-img" alt="Answer Image">` : ''}
                                     </label>
@@ -101,7 +109,12 @@
                     questionsDiv.appendChild(questionDiv);
                 });
 
-                clientsData.set(clientId, { ...clientsData.get(clientId), timer, questions });
+                const clientData = clientsData.get(clientId) || { userInfo: 'Пользователь ' + clientId, questions: [] };
+                clientsData.set(clientId, { ...clientData, timer, questions: questions || [] });
+                console.log(`Обновлена секция для clientId ${clientId}`, clientsData.get(clientId));
+            } else {
+                console.log(`Секция для clientId ${clientId} не найдена, создаем новую`);
+                createClientSection(clientId, clientsData.get(clientId)?.userInfo || 'Пользователь ' + clientId, timer, questions);
             }
         }
 
@@ -132,6 +145,7 @@
                     if (clientSection) {
                         clientSection.remove();
                         clientsData.delete(data.clientId);
+                        console.log(`Удалена секция для clientId ${data.clientId}`);
                     }
                 }
 
@@ -143,34 +157,33 @@
                 }
 
                 if (data.type === 'question' || data.type === 'userAnswer') {
-                    const clientData = clientsData.get(data.clientId) || { questions: [] };
-                    let questions = clientData.questions || [];
-                    const existingQuestion = questions.find(q => q.qIndex === data.qIndex);
+                    const clientData = clientsData.get(data.clientId) || { questions: [], userInfo: data.userInfo };
+                    let questions = clientData.questions ? [...clientData.questions] : [];
 
-                    if (existingQuestion) {
-                        existingQuestion.question = data.question;
-                        existingQuestion.questionImg = data.questionImg;
-                        existingQuestion.answers = data.answers || existingQuestion.answers;
-                        if (data.type === 'userAnswer') {
-                            existingQuestion.userAnswer = {
-                                answer: data.answer,
-                                varIndex: data.varIndex
-                            };
-                        }
+                    const existingQuestionIndex = questions.findIndex(q => q.qIndex === data.qIndex);
+                    const questionData = {
+                        qIndex: data.qIndex,
+                        question: data.question || 'Вопрос не указан',
+                        questionImg: data.questionImg,
+                        answers: data.answers || [],
+                        userAnswer: data.type === 'userAnswer' ? { answer: data.answer, varIndex: data.varIndex } : null
+                    };
+
+                    if (existingQuestionIndex !== -1) {
+                        questions[existingQuestionIndex] = {
+                            ...questions[existingQuestionIndex],
+                            question: data.question || questions[existingQuestionIndex].question,
+                            questionImg: data.questionImg || questions[existingQuestionIndex].questionImg,
+                            answers: data.answers || questions[existingQuestionIndex].answers,
+                            userAnswer: data.type === 'userAnswer' ? { answer: data.answer, varIndex: data.varIndex } : questions[existingQuestionIndex].userAnswer
+                        };
                     } else {
-                        questions.push({
-                            qIndex: data.qIndex,
-                            question: data.question,
-                            questionImg: data.questionImg,
-                            answers: data.answers || [],
-                            userAnswer: data.type === 'userAnswer' ? { answer: data.answer, varIndex: data.varIndex } : null
-                        });
+                        questions.push(questionData);
                     }
 
-                    if (clientsData.has(data.clientId)) {
-                        updateClientSection(data.clientId, data.timer, questions);
-                    } else {
-                        createClientSection(data.clientId, data.userInfo, data.timer, questions);
+                    updateClientSection(data.clientId, data.timer, questions);
+                    if (!clientsData.has(data.clientId)) {
+                        clientsData.set(data.clientId, { userInfo: data.userInfo, timer: data.timer, questions });
                     }
                 }
 

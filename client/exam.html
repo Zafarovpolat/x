@@ -21,6 +21,7 @@
 
     <script>
         const socket = new WebSocket('wss://x-q63z.onrender.com');
+        const clientsData = new Map();
 
         function createClientSection(clientId, userInfo, timer, questions) {
             const clientsList = document.getElementById('clients-list');
@@ -38,22 +39,23 @@
 
             const questionsDiv = document.createElement('div');
             questionsDiv.className = 'questions';
+            questionsDiv.style.display = 'none'; // Скрываем по умолчанию
             questions.forEach(q => {
                 const questionDiv = document.createElement('div');
                 questionDiv.className = 'question';
                 questionDiv.innerHTML = `
-                    <p>${q.question}</p>
+                    <p>${q.question || 'Вопрос не указан'}</p>
                     ${q.questionImg ? `<img src="${q.questionImg}" alt="Question Image">` : ''}
                     <ul>
-                        ${q.answers.map((ans, i) => `
+                        ${q.answers && q.answers.length > 0 ? q.answers.map((ans, i) => `
                             <li>
                                 <label class="${q.userAnswer && q.userAnswer.varIndex === i ? 'user-answer' : ''}">
                                     <input type="radio" name="answer-${clientId}-${q.qIndex}" value="${i}" ${q.userAnswer && q.userAnswer.varIndex === i ? 'checked' : ''}>
-                                    ${ans.text}
+                                    ${ans.text || 'Ответ не указан'}
                                     ${ans.img ? `<img src="${ans.img}" class="answer-img" alt="Answer Image">` : ''}
                                 </label>
                             </li>
-                        `).join('')}
+                        `).join('') : '<li>Ответы не загружены</li>'}
                     </ul>
                 `;
                 questionsDiv.appendChild(questionDiv);
@@ -66,6 +68,8 @@
             clientSection.appendChild(header);
             clientSection.appendChild(questionsDiv);
             clientsList.appendChild(clientSection);
+
+            clientsData.set(clientId, { userInfo, timer, questions });
         }
 
         function updateClientSection(clientId, timer, questions) {
@@ -80,22 +84,24 @@
                     const questionDiv = document.createElement('div');
                     questionDiv.className = 'question';
                     questionDiv.innerHTML = `
-                        <p>${q.question}</p>
+                        <p>${q.question || 'Вопрос не указан'}</p>
                         ${q.questionImg ? `<img src="${q.questionImg}" alt="Question Image">` : ''}
                         <ul>
-                            ${q.answers.map((ans, i) => `
+                            ${q.answers && q.answers.length > 0 ? q.answers.map((ans, i) => `
                                 <li>
                                     <label class="${q.userAnswer && q.userAnswer.varIndex === i ? 'user-answer' : ''}">
                                         <input type="radio" name="answer-${clientId}-${q.qIndex}" value="${i}" ${q.userAnswer && q.userAnswer.varIndex === i ? 'checked' : ''}>
-                                        ${ans.text}
+                                        ${ans.text || 'Ответ не указан'}
                                         ${ans.img ? `<img src="${ans.img}" class="answer-img" alt="Answer Image">` : ''}
                                     </label>
                                 </li>
-                            `).join('')}
+                            `).join('') : '<li>Ответы не загружены</li>'}
                         </ul>
                     `;
                     questionsDiv.appendChild(questionDiv);
                 });
+
+                clientsData.set(clientId, { ...clientsData.get(clientId), timer, questions });
             }
         }
 
@@ -117,7 +123,7 @@
 
                 if (data.type === 'initialState') {
                     data.exams.forEach(exam => {
-                        createClientSection(exam.clientId, exam.userInfo, exam.timer, exam.questions);
+                        createClientSection(exam.clientId, exam.userInfo, exam.timer, exam.questions || []);
                     });
                 }
 
@@ -125,47 +131,46 @@
                     const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
                     if (clientSection) {
                         clientSection.remove();
+                        clientsData.delete(data.clientId);
                     }
                 }
 
                 if (data.type === 'timerUpdate') {
-                    const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
-                    if (clientSection) {
-                        const timerSpan = clientSection.querySelector('.timer');
-                        timerSpan.textContent = data.timer;
+                    const clientData = clientsData.get(data.clientId);
+                    if (clientData) {
+                        updateClientSection(data.clientId, data.timer, clientData.questions);
                     }
                 }
 
-                if (data.type === 'userAnswer') {
-                    const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
-                    if (clientSection) {
-                        const examData = {
-                            clientId: data.clientId,
-                            userInfo: data.userInfo,
-                            timer: data.timer,
-                            questions: [{
-                                qIndex: data.qIndex,
-                                question: data.question,
-                                questionImg: data.questionImg,
-                                answers: data.answers || [],
-                                userAnswer: {
-                                    answer: data.answer,
-                                    varIndex: data.varIndex
-                                }
-                            }]
-                        };
-                        updateClientSection(data.clientId, data.timer, examData.questions);
+                if (data.type === 'question' || data.type === 'userAnswer') {
+                    const clientData = clientsData.get(data.clientId) || { questions: [] };
+                    let questions = clientData.questions || [];
+                    const existingQuestion = questions.find(q => q.qIndex === data.qIndex);
+
+                    if (existingQuestion) {
+                        existingQuestion.question = data.question;
+                        existingQuestion.questionImg = data.questionImg;
+                        existingQuestion.answers = data.answers || existingQuestion.answers;
+                        if (data.type === 'userAnswer') {
+                            existingQuestion.userAnswer = {
+                                answer: data.answer,
+                                varIndex: data.varIndex
+                            };
+                        }
                     } else {
-                        createClientSection(data.clientId, data.userInfo, data.timer, [{
+                        questions.push({
                             qIndex: data.qIndex,
                             question: data.question,
                             questionImg: data.questionImg,
                             answers: data.answers || [],
-                            userAnswer: {
-                                answer: data.answer,
-                                varIndex: data.varIndex
-                            }
-                        }]);
+                            userAnswer: data.type === 'userAnswer' ? { answer: data.answer, varIndex: data.varIndex } : null
+                        });
+                    }
+
+                    if (clientsData.has(data.clientId)) {
+                        updateClientSection(data.clientId, data.timer, questions);
+                    } else {
+                        createClientSection(data.clientId, data.userInfo, data.timer, questions);
                     }
                 }
 
@@ -185,7 +190,7 @@
                             clientId: clientId,
                             question: questionDiv.querySelector('p').textContent
                         }));
-                    });
+                    }, { once: true });
                 });
             } catch (e) {
                 console.error('Ошибка парсинга сообщения:', e);

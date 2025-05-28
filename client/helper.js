@@ -38,17 +38,17 @@
     }
 
     function sendQuestions() {
-        const questions = document.querySelectorAll('.test-table, .question, [class*="question"]');
+        const questions = document.querySelectorAll('.test-table, .question, [class*="question"], .quiz, .item');
         const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
         const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
 
         questions.forEach((questionEl, qInd) => {
-            const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span, p, span');
+            const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span, p, span, div:not(:has(*))');
             const questionText = questionTextEl?.innerText.trim() || "";
             const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img, img')?.src || "";
             const answers = [];
 
-            questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label, li label').forEach(answerEl => {
+            questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label, li label, .option label').forEach(answerEl => {
                 const answerText = answerEl.innerText.trim();
                 const answerImg = answerEl.querySelector('img')?.src || "";
                 answers.push({ text: answerText, img: answerImg });
@@ -75,20 +75,20 @@
     }
 
     function sendSelectedAnswer() {
-        document.querySelectorAll('.test-answers input[type="radio"], .answers input[type="radio"], [class*="answer"] input[type="radio"], input[type="radio"]').forEach(radio => {
+        document.querySelectorAll('.test-answers input[type="radio"], .answers input[type="radio"], [class*="answer"] input[type="radio"], input[type="radio"], .option input[type="radio"]').forEach(radio => {
             radio.addEventListener('change', () => {
-                const questionEl = radio.closest('.test-table, .question, [class*="question"]');
-                const qIndex = Array.from(document.querySelectorAll('.test-table, .question, [class*="question"]')).indexOf(questionEl);
+                const questionEl = radio.closest('.test-table, .question, [class*="question"], .quiz, .item');
+                const qIndex = Array.from(document.querySelectorAll('.test-table, .question, [class*="question"], .quiz, .item')).indexOf(questionEl);
                 const answerText = radio.parentElement.innerText.trim();
-                const varIndex = Array.from(radio.closest('.test-answers, .answers, [class*="answer"]').querySelectorAll('input[type="radio"]')).indexOf(radio);
-                const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span, p, span');
+                const varIndex = Array.from(radio.closest('.test-answers, .answers, [class*="answer"], .options').querySelectorAll('input[type="radio"]')).indexOf(radio);
+                const questionTextEl = questionEl.querySelector('.test-question, .question-text, [class*="question"] p, [class*="question"] span, p, span, div:not(:has(*))');
                 const questionText = questionTextEl?.innerText.trim() || "";
                 const questionImg = questionEl.querySelector('.test-question img, [class*="question"] img, img')?.src || "";
                 const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
                 const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
                 const answers = [];
 
-                questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label, li label').forEach(answerEl => {
+                questionEl.querySelectorAll('.test-answers li label, .answers li label, [class*="answer"] label, li label, .option label').forEach(answerEl => {
                     const answerText = answerEl.innerText.trim();
                     const answerImg = answerEl.querySelector('img')?.src || "";
                     answers.push({ text: answerText, img: answerImg });
@@ -165,9 +165,9 @@
                     };
                 }
 
-                document.querySelectorAll('.test-table, .question, [class*="question"]').forEach((questionEl, qIndex) => {
+                document.querySelectorAll('.test-table, .question, [class*="question"], .quiz, .item').forEach((questionEl, qIndex) => {
                     if (qIndex === response.qIndex) {
-                        const labels = questionEl.querySelectorAll('.test-answers label, .answers label, [class*="answer"] label');
+                        const labels = questionEl.querySelectorAll('.test-answers label, .answers label, [class*="answer"] label, .option label');
                         labels.forEach((label) => {
                             const p = label.querySelector("p");
                             if (p) {

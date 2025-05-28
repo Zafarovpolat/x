@@ -6,43 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Сайт-помощник</title>
     <link rel="stylesheet" href="./style.css">
-    <style>
-        .client-section {
-            margin-bottom: 20px;
-            border: 1px solid #ccc;
-            padding: 10px;
-        }
-        .client-header {
-            display: flex;
-            align-items: center;
-        }
-        .timer {
-            margin-left: 10px;
-            font-size: 18px;
-            color: #333;
-        }
-        .questions {
-            margin-top: 10px;
-        }
-        .question {
-            margin-bottom: 15px;
-        }
-        .answers {
-            list-style: none;
-            padding: 0;
-        }
-        .answers li {
-            margin: 5px 0;
-            cursor: pointer;
-        }
-        .answer-img {
-            max-width: 100px;
-        }
-        button {
-            cursor: pointer;
-            padding: 5px 10px;
-        }
-    </style>
 </head>
 
 <body>
@@ -60,7 +23,6 @@
     </section>
 
     <script>
-        // Проверка авторизации
         if (localStorage.getItem('isAuthenticated') !== 'true') {
             document.getElementById('auth-check').style.display = 'block';
         } else {
@@ -107,19 +69,16 @@
 
                     const questionsDiv = document.createElement('div');
                     questionsDiv.classList.add('questions');
-                    questionsDiv.style.display = 'none'; // По умолчанию скрыто
+                    questionsDiv.style.display = 'none';
 
                     clientSection.appendChild(headerDiv);
                     clientSection.appendChild(questionsDiv);
                     clientsDiv.appendChild(clientSection);
 
                     clientsData[clientId] = questionsDiv;
-                } else {
-                    // Обновляем таймер, если он пришел в данных
-                    if (timer) {
-                        const timerSpan = clientSection.querySelector('.timer');
-                        timerSpan.textContent = timer;
-                    }
+                } else if (timer) {
+                    const timerSpan = clientSection.querySelector('.timer');
+                    timerSpan.textContent = timer;
                 }
 
                 const uniqueId = `${clientId}-${qIndex}`;
@@ -182,6 +141,26 @@
                 clientsData[clientId].appendChild(questionDiv);
             }
 
+            function updateAnswer(clientId, qIndex, varIndex) {
+                const uniqueId = `${clientId}-${qIndex}`;
+                const questionDiv = document.querySelector(`.question[data-unique-id="${uniqueId}"]`);
+                if (questionDiv) {
+                    const inputs = questionDiv.querySelectorAll(`input[name="question-${uniqueId}"]`);
+                    inputs.forEach(input => {
+                        if (parseInt(input.dataset.varIndex) === varIndex) {
+                            input.checked = true;
+                            input.parentElement.classList.add('selected-answer');
+                        } else {
+                            input.checked = false;
+                            input.parentElement.classList.remove('selected-answer');
+                        }
+                    });
+                    console.log(`Ответ обновлен для clientId: ${clientId}, qIndex: ${qIndex}, varIndex: ${varIndex}`);
+                } else {
+                    console.log(`Вопрос не найден: ${uniqueId}`);
+                }
+            }
+
             function removeClient(clientId) {
                 const clientSection = document.querySelector(`.client-section[data-client-id="${clientId}"]`);
                 if (clientSection) {
@@ -199,6 +178,8 @@
                     console.error('Ошибка парсинга JSON:', e);
                     return;
                 }
+
+                console.log('Получено сообщение:', data);
 
                 if (data.type === 'initialState') {
                     data.exams.forEach(exam => {
@@ -223,11 +204,48 @@
                 }
 
                 if (data.type === 'timerUpdate') {
-                    const clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
-                    if (clientSection) {
+                    console.log('Получено timerUpdate:', data);
+                    let clientSection = document.querySelector(`.client-section[data-client-id="${data.clientId}"]`);
+                    if (!clientSection) {
+                        console.log('Создание новой секции для clientId:', data.clientId);
+                        clientSection = document.createElement('div');
+                        clientSection.classList.add('client-section');
+                        clientSection.dataset.clientId = data.clientId;
+
+                        const headerDiv = document.createElement('div');
+                        headerDiv.classList.add('client-header');
+
+                        const toggleButton = document.createElement('button');
+                        const timerSpan = document.createElement('span');
+                        timerSpan.classList.add('timer');
+                        timerSpan.textContent = data.timer;
+
+                        toggleButton.appendChild(document.createTextNode(`Клиент ${data.clientId}`));
+                        toggleButton.appendChild(timerSpan);
+
+                        toggleButton.addEventListener('click', () => {
+                            const questionsDiv = clientSection.querySelector('.questions');
+                            questionsDiv.style.display = (questionsDiv.style.display === 'none' || !questionsDiv.style.display) ? 'block' : 'none';
+                        });
+
+                        headerDiv.appendChild(toggleButton);
+
+                        const questionsDiv = document.createElement('div');
+                        questionsDiv.classList.add('questions');
+                        questionsDiv.style.display = 'none';
+
+                        clientSection.appendChild(headerDiv);
+                        clientSection.appendChild(questionsDiv);
+                        clientsDiv.appendChild(clientSection);
+
+                        clientsData[data.clientId] = questionsDiv;
+                    } else {
                         const timerSpan = clientSection.querySelector('.timer');
                         if (timerSpan) {
                             timerSpan.textContent = data.timer;
+                            console.log('Таймер обновлен для clientId:', data.clientId, 'время:', data.timer);
+                        } else {
+                            console.log('Элемент .timer не найден для clientId:', data.clientId);
                         }
                     }
                     return;
@@ -236,6 +254,10 @@
                 if (data.clientId && (data.question || data.questionImg) && data.answers) {
                     renderExam(data);
                 }
+
+                if (data.processedAnswer) {
+                    updateAnswer(data.clientId, data.qIndex, data.varIndex);
+                }
             };
 
             socket.onerror = (error) => {
@@ -243,7 +265,15 @@
             };
 
             socket.onclose = () => {
-                console.log('WebSocket соединение закрыто');
+                console.log('WebSocket закрыт, пытаемся переподключиться');
+                setTimeout(() => {
+                    const newSocket = new WebSocket('wss://x-q63z.onrender.com');
+                    newSocket.onopen = socket.onopen;
+                    newSocket.onmessage = socket.onmessage;
+                    newSocket.onerror = socket.onerror;
+                    newSocket.onclose = socket.onclose;
+                    socket = newSocket;
+                }, 5000);
             };
         }
     </script>

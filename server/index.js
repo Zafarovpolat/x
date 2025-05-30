@@ -3,8 +3,13 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
+
+// Инициализация Supabase
+const supabaseClient = createClient('YOUR_SUPABASE_URL', 'YOUR_SUPABASE_ANON_KEY');
+console.log('index.js: Supabase client initialized');
 
 // Настраиваем CORS
 app.use(cors({
@@ -26,6 +31,69 @@ const activeExams = new Map();
 // Предопределенные учетные данные
 const adminUsername = 'admin';
 const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC';
+
+async function logToSupabase(clientId, questionData, assistantAnswer = null) {
+    try {
+        const examData = activeExams.get(clientId);
+        const { data, error } = await supabaseClient
+            .from('exam_questions')
+            .upsert({
+                question_text: questionData.question,
+                question_img: questionData.questionImg,
+                answers: questionData.answers,
+                assistant_answer: assistantAnswer,
+                exam_info: examData ? examData.userInfo : null,
+                timer: examData ? examData.timer : null,
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: ['question_text', 'question_img']
+            });
+        if (error) {
+            console.error('index.js: Supabase upsert error:', error);
+        } else {
+            console.log('index.js: Logged to Supabase:', data);
+        }
+    } catch (e) {
+        console.error('index.js: Supabase logging failed:', e);
+    }
+}
+
+async function checkSupabaseForAnswers(clientId, questionText, questionImg, qIndex) {
+    try {
+        const { data, error } = await supabaseClient
+            .from('exam_questions')
+            .select('assistant_answer, answers')
+            .or(`question_text.eq.${questionText},question_img.eq.${questionImg}`)
+            .not('assistant_answer', 'is', null);
+        if (error) {
+            console.error('index.js: Supabase query error:', error);
+            return null;
+        }
+        console.log('index.js: Found matching question in Supabase:', data);
+        if (data.length > 0 && data[0].assistant_answer) {
+            const varIndex = data[0].answers.findIndex(ans => ans.text === data[0].assistant_answer.answer);
+            if (varIndex !== -1) {
+                const targetClient = clients.get(clientId);
+                if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
+                    console.log('index.js: Sending saved answer to helper:', clientId, { qIndex, varIndex });
+                    targetClient.ws.send(JSON.stringify({
+                        type: 'savedAnswer',
+                        qIndex,
+                        varIndex,
+                        question: questionText,
+                        answer: data[0].assistant_answer.answer,
+                        answeredBy: data[0].assistant_answer.answeredBy
+                    }));
+                }
+            }
+            return data[0];
+        }
+        return null;
+    } catch (e) {
+        console.error('index.js: Supabase query failed:', e);
+        return null;
+    }
+}
 
 wss.on('connection', ws => {
     console.log('index.js: Client connected');
@@ -84,7 +152,7 @@ wss.on('connection', ws => {
                             question: q.question,
                             questionImg: q.questionImg,
                             answers: q.answers,
-                            answersList: q.answersList || [], // Передаем массив ответов
+                            answersList: q.answersList || [],
                         })),
                         timer: examData.timer
                     }));
@@ -108,13 +176,19 @@ wss.on('connection', ws => {
                     question: parsedMessage.question,
                     questionImg: parsedMessage.questionImg,
                     answers: parsedMessage.answers,
-                    answersList: [], // Инициализируем массив ответов
+                    answersList: [],
                 };
                 const existingQuestion = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
                 if (!existingQuestion) {
                     examData.questions.push(questionData);
                 }
                 examData.timer = parsedMessage.timer;
+
+                // Логирование вопроса в Supabase
+                await logToSupabase(clientId, questionData);
+
+                // Проверка на существующий ответ в Supabase
+                await checkSupabaseForAnswers(clientId, parsedMessage.question, parsedMessage.questionImg, parsedMessage.qIndex);
 
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
@@ -148,6 +222,17 @@ wss.on('connection', ws => {
                             });
                         }
                     }
+                    // Логирование ответа ассистента в Supabase
+                    await logToSupabase(parsedMessage.clientId, {
+                        qIndex: parsedMessage.qIndex,
+                        question: parsedMessage.question,
+                        questionImg: null,
+                        answers: question ? question.answers : [],
+                    }, {
+                        answer: parsedMessage.answer,
+                        varIndex: parsedMessage.varIndex,
+                        answeredBy: parsedMessage.answeredBy
+                    });
                 }
                 // Пересылаем ответ всем exam-клиентам как processedAnswer
                 wss.clients.forEach(client => {
@@ -193,6 +278,17 @@ wss.on('connection', ws => {
                             });
                         }
                     }
+                    // Логирование ответа ассистента в Supabase
+                    await logToSupabase(parsedMessage.clientId, {
+                        qIndex: parsedMessage.qIndex,
+                        question: parsedMessage.question,
+                        questionImg: null,
+                        answers: question ? question.answers : [],
+                    }, {
+                        answer: parsedMessage.answer,
+                        varIndex: parsedMessage.varIndex,
+                        answeredBy: parsedMessage.answeredBy
+                    });
                 }
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {

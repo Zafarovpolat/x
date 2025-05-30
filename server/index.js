@@ -8,7 +8,7 @@ const app = express();
 
 // Настраиваем CORS
 app.use(cors({
-    origin: '*',
+    origin: '*', // TODO: Заменить на конкретные домены для безопасности
 }));
 
 // Раздача статических файлов
@@ -28,7 +28,7 @@ const adminUsername = 'admin';
 const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC';
 
 wss.on('connection', ws => {
-    console.log('Клиент подключился');
+    console.log('index.js: Client connected');
 
     const clientId = Math.random().toString(36).substr(2, 9);
     clients.set(clientId, { ws, role: null, lastActive: Date.now() });
@@ -47,7 +47,7 @@ wss.on('connection', ws => {
     });
 
     ws.on('message', async message => {
-        console.log('Получено сообщение:', message);
+        console.log('index.js: Received message:', message);
 
         try {
             const parsedMessage = JSON.parse(message);
@@ -73,7 +73,7 @@ wss.on('connection', ws => {
             // Регистрация роли
             if (parsedMessage.role) {
                 clients.get(clientId).role = parsedMessage.role;
-                console.log(`Клиент ${clientId} зарегистрирован как ${parsedMessage.role}`);
+                console.log(`index.js: Client ${clientId} registered as ${parsedMessage.role}`);
 
                 if (parsedMessage.role === 'exam') {
                     const examsData = Array.from(activeExams.entries()).map(([examClientId, examData]) => ({
@@ -82,6 +82,7 @@ wss.on('connection', ws => {
                         questions: examData.questions,
                         timer: examData.timer
                     }));
+                    console.log('index.js: Sending initialState to exam client:', examsData);
                     ws.send(JSON.stringify({ type: 'initialState', exams: examsData }));
                 }
                 return;
@@ -90,6 +91,7 @@ wss.on('connection', ws => {
             // Обработка вопроса от helper
             if ((parsedMessage.question || parsedMessage.questionImg) && clients.get(clientId).role === 'helper') {
                 parsedMessage.clientId = clientId;
+                console.log('index.js: Processing question from helper:', parsedMessage);
 
                 if (!activeExams.has(clientId)) {
                     activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer });
@@ -106,6 +108,7 @@ wss.on('connection', ws => {
 
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                        console.log('index.js: Forwarding question to exam client:', client.clientId);
                         client.send(JSON.stringify(parsedMessage));
                     }
                 });
@@ -113,13 +116,24 @@ wss.on('connection', ws => {
 
             // Ответ от exam отправляем конкретному helper
             if (parsedMessage.answer && clients.get(clientId).role === 'exam') {
+                console.log('index.js: Processing answer from exam:', parsedMessage);
                 const targetClient = clients.get(parsedMessage.clientId);
                 if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
+                    console.log('index.js: Sending answer to helper:', parsedMessage.clientId);
                     targetClient.ws.send(JSON.stringify(parsedMessage));
                 }
                 // Пересылаем ответ всем exam-клиентам как processedAnswer
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                        console.log('index.js: Broadcasting processedAnswer to exam client:', client.clientId, {
+                            type: 'processedAnswer',
+                            qIndex: parsedMessage.qIndex,
+                            question: parsedMessage.question,
+                            answer: parsedMessage.answer,
+                            varIndex: parsedMessage.varIndex,
+                            clientId: parsedMessage.clientId,
+                            answeredBy: parsedMessage.answeredBy
+                        });
                         client.send(JSON.stringify({
                             type: 'processedAnswer',
                             qIndex: parsedMessage.qIndex,
@@ -135,6 +149,7 @@ wss.on('connection', ws => {
 
             // Обработанный ответ от helper отправляем всем exam
             if (parsedMessage.processedAnswer && clients.get(clientId).role === 'helper') {
+                console.log('index.js: Broadcasting processedAnswer from helper:', parsedMessage);
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
                         client.send(JSON.stringify(parsedMessage));
@@ -144,10 +159,12 @@ wss.on('connection', ws => {
 
             // Обработка обновления таймера от helper
             if (parsedMessage.type === 'timerUpdate' && clients.get(clientId).role === 'helper') {
+                console.log('index.js: Processing timerUpdate:', parsedMessage);
                 if (activeExams.has(clientId)) {
                     activeExams.get(clientId).timer = parsedMessage.timer;
                     wss.clients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                            console.log('index.js: Sending timerUpdate to exam client:', client.clientId);
                             client.send(JSON.stringify({
                                 type: 'timerUpdate',
                                 clientId: clientId,
@@ -158,12 +175,12 @@ wss.on('connection', ws => {
                 }
             }
         } catch (e) {
-            console.error('Ошибка парсинга JSON на сервере:', e);
+            console.error('index.js: JSON parse error:', e);
         }
     });
 
     ws.on('close', () => {
-        console.log('Клиент отключился:', clientId);
+        console.log('index.js: Client disconnected:', clientId);
         clearInterval(pingInterval);
         const client = clients.get(clientId);
 
@@ -171,6 +188,7 @@ wss.on('connection', ws => {
             activeExams.delete(clientId);
             wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                    console.log('index.js: Notifying exam clients of disconnection:', client.clientId);
                     client.send(JSON.stringify({ type: 'clientDisconnected', clientId }));
                 }
             });
@@ -184,11 +202,12 @@ wss.on('connection', ws => {
         clients.forEach((client, id) => {
             const inactiveTime = (Date.now() - client.lastActive) / 1000;
             if (inactiveTime > 60 && client.ws.readyState !== WebSocket.OPEN) {
-                console.log(`Клиент ${id} неактивен более 60 секунд, удаление`);
+                console.log(`index.js: Client ${id} inactive for >60s, removing`);
                 if (client.role === 'helper') {
                     activeExams.delete(id);
                     wss.clients.forEach(otherClient => {
                         if (otherClient.readyState === WebSocket.OPEN && clients.get(otherClient.clientId).role === 'exam') {
+                            console.log('index.js: Notifying exam clients of inactive client:', id);
                             otherClient.send(JSON.stringify({ type: 'clientDisconnected', clientId: id }));
                         }
                     });
@@ -199,4 +218,4 @@ wss.on('connection', ws => {
     }, 60000);
 });
 
-console.log('WebSocket сервер запущен');
+console.log('index.js: WebSocket server started');

@@ -94,6 +94,7 @@
                     answer: response.answer,
                     varIndex: response.varIndex,
                     clientId: response.clientId,
+                    answeredBy: response.answeredBy, // Сохраняем answeredBy
                     processedAnswer: true
                 };
                 console.log('Отправка обработанного ответа в exam:', processedResponse);

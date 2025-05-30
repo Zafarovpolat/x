@@ -1,29 +1,103 @@
 (async () => {
+    // Инициализация Supabase клиента
+    const { createClient } = supabase;
+    const supabaseClient = createClient('https://ledxbbsylvxnfjogwkzf.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlZHhiYnN5bHZ4bmZqb2d3a3pmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTE0NTUxOCwiZXhwIjoyMDU2NzIxNTE4fQ.A9wvdnZmX_3wu9Pvhpy0lR3ds8jTNA6tKe59YaB_RGE');
+    console.log('helper.js: Supabase client initialized');
+
     const socket = new WebSocket('wss://x-q63z.onrender.com');
 
     function hideBannedScreen() {
         document.querySelectorAll('.js-banned-screen').forEach(bannedScreen => {
             bannedScreen.style.setProperty('display', 'none', 'important');
+            console.log('helper.js: Hid banned screen element:', bannedScreen);
         });
     }
 
     const observer = new MutationObserver(() => {
+        console.log('helper.js: Mutation observed, checking for banned screens');
         hideBannedScreen();
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
+    console.log('helper.js: MutationObserver set up on document.body');
 
     hideBannedScreen();
 
     window.Audio = function () {
+        console.log('helper.js: Overriding Audio.play to no-op');
         return {
-            play: function () { }
+            play: function () {}
         };
     };
 
+    async function logToSupabase(questionData, assistantAnswer = null) {
+        const { qIndex, question, questionImg, answers, userInfo, timer } = questionData;
+        try {
+            const { data, error } = await supabaseClient
+                .from('exam_questions')
+                .upsert({
+                    question_text: question,
+                    question_img: questionImg,
+                    answers: answers,
+                    assistant_answer: assistantAnswer,
+                    exam_info: userInfo,
+                    timer: timer,
+                    updated_at: new Date().toISOString()
+                }, {
+                    onConflict: ['question_text', 'question_img']
+                });
+            if (error) {
+                console.error('helper.js: Supabase upsert error:', error);
+            } else {
+                console.log('helper.js: Logged to Supabase:', data);
+            }
+        } catch (e) {
+            console.error('helper.js: Supabase logging failed:', e);
+        }
+    }
+
+    async function checkSupabaseForAnswers(questionText, questionImg) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('exam_questions')
+                .select('assistant_answer, answers')
+                .or(`question_text.eq.${questionText},question_img.eq.${questionImg}`)
+                .not('assistant_answer', 'is', null);
+            if (error) {
+                console.error('helper.js: Supabase query error:', error);
+                return null;
+            }
+            console.log('helper.js: Found matching question in Supabase:', data);
+            return data.length > 0 ? data[0] : null;
+        } catch (e) {
+            console.error('helper.js: Supabase query failed:', e);
+            return null;
+        }
+    }
+
+    function highlightAnswer(qIndex, varIndex) {
+        document.querySelectorAll('.test-table').forEach((questionEl, index) => {
+            if (index === qIndex) {
+                const labels = questionEl.querySelectorAll('.test-answers label');
+                labels.forEach((label, index) => {
+                    const p = label.querySelector('p');
+                    const img = label.querySelector('img');
+                    if (index === varIndex) {
+                        if (p) {
+                            p.style.color = '#00f';
+                            p.style.fontWeight = 'bold';
+                        }
+                        if (img) img.style.border = '2px solid #00f';
+                        console.log('helper.js: Highlighted answer for question', qIndex, 'variant', varIndex);
+                    }
+                });
+            }
+        });
+    }
+
     function sendTimerUpdate() {
         const timerElement = document.querySelector('#timer, .timer, [id*="timer"], [class*="timer"]');
-        const timerText = timerElement?.innerText.trim() || "00:00:00";
+        const timerText = timerElement?.innerText.trim() || '00:00:00';
         const data = JSON.stringify({
             type: 'timerUpdate',
             timer: timerText
@@ -36,42 +110,57 @@
         }
     }
 
-    function sendQuestions() {
+    async function sendQuestions() {
         const questions = document.querySelectorAll('.test-table');
-        const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || "";
-        const timerText = document.querySelector('#timer')?.innerText.trim() || "00:00:00";
+        const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || '';
+        const timerText = document.querySelector('#timer')?.innerText.trim() || '00:00:00';
+        console.log('helper.js: Found questions:', questions.length, 'breadcrumb:', breadcrumbText, 'timer:', timerText);
 
-        questions.forEach((questionEl, qInd) => {
-            const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || "";
-            const questionImg = questionEl.querySelector('.test-question img')?.src || "";
+        for (const [qInd, questionEl] of questions.entries()) {
+            const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || '';
+            const questionImg = questionEl.querySelector('.test-question img')?.src || '';
             const answers = [];
 
             questionEl.querySelectorAll('.test-answers li label').forEach(answerEl => {
                 const answerText = answerEl.innerText.trim();
-                const answerImg = answerEl.querySelector('img')?.src || "";
+                const answerImg = answerEl.querySelector('img')?.src || '';
                 answers.push({ text: answerText, img: answerImg });
             });
 
+            console.log('helper.js: Processing question', qInd, 'text:', questionText, 'image:', questionImg, 'answers:', answers.length);
+
             if ((questionText || questionImg) && answers.length > 0) {
-                const data = JSON.stringify({
+                const questionData = {
                     qIndex: qInd,
                     question: questionText,
                     questionImg: questionImg,
                     answers: answers,
                     userInfo: breadcrumbText,
                     timer: timerText
-                });
+                };
+                console.log('helper.js: Sending question data:', questionData);
+                socket.send(JSON.stringify(questionData));
 
-                console.log('helper.js: Sending question:', data);
-                socket.send(data);
+                // Логирование вопроса в Supabase
+                await logToSupabase(questionData);
+
+                // Проверка на существование ответа в Supabase
+                const existingAnswer = await checkSupabaseForAnswers(questionText, questionImg);
+                if (existingAnswer && existingAnswer.assistant_answer) {
+                    const varIndex = existingAnswer.answers.findIndex(ans => ans.text === existingAnswer.assistant_answer.answer);
+                    if (varIndex !== -1) {
+                        highlightAnswer(qInd, varIndex);
+                    }
+                }
             }
-        });
+        }
     }
 
     socket.onopen = () => {
         console.log('helper.js: WebSocket connected');
         socket.send(JSON.stringify({ role: 'helper' }));
         setTimeout(() => {
+            console.log('helper.js: Sending initial questions after 2s delay');
             sendQuestions();
         }, 2000);
         console.log('helper.js: Setting interval for sendTimerUpdate');
@@ -81,7 +170,7 @@
         }, 1000);
     };
 
-    socket.onmessage = event => {
+    socket.onmessage = async event => {
         let response;
         try {
             response = JSON.parse(event.data);
@@ -100,112 +189,124 @@
                 console.log('helper.js: Sending processed response to exam:', processedResponse);
                 socket.send(JSON.stringify(processedResponse));
 
+                // Логирование ответа ассистента в Supabase
+                await logToSupabase({
+                    qIndex: response.qIndex,
+                    question: response.question,
+                    questionImg: null,
+                    answers: [],
+                    userInfo: null,
+                    timer: null
+                }, {
+                    answer: response.answer,
+                    varIndex: response.varIndex,
+                    answeredBy: response.answeredBy
+                });
+
                 const breadcrumbHeader = document.querySelector('.breadcrumb-header');
                 if (breadcrumbHeader) {
                     const coloredSpan = breadcrumbHeader.querySelector('span');
                     const targetElement = coloredSpan || breadcrumbHeader;
 
                     if (!targetElement.style.opacity) {
-                        targetElement.style.opacity = "1";
+                        targetElement.style.opacity = '1';
                     }
 
                     targetElement.onmouseover = () => {
-                        targetElement.style.opacity = "0.7";
+                        targetElement.style.opacity = '0.7';
+                        console.log('helper.js: Mouseover on breadcrumb header');
                     };
 
                     targetElement.onmouseout = () => {
-                        targetElement.style.opacity = "1";
+                        targetElement.style.opacity = '1';
+                        console.log('helper.js: Mouseout on breadcrumb header');
                     };
                 }
 
                 document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
                     if (qIndex === response.qIndex) {
                         const labels = questionEl.querySelectorAll('.test-answers label');
+                        console.log('helper.js: Processing question', qIndex, 'with', labels.length, 'labels');
                         labels.forEach((label) => {
-                            const p = label.querySelector("p");
+                            const p = label.querySelector('p');
                             if (p) {
-                                p.style.color = "#666";
-                                p.style.opacity = "1";
+                                p.style.color = '#666';
+                                p.style.opacity = '1';
                                 label.onmouseover = null;
                                 label.onmouseout = null;
+                                console.log('helper.js: Reset styles for label p:', p);
                             }
                         });
 
                         labels.forEach((label, varIndex) => {
-                            const p = label.querySelector("p");
-                            const img = label.querySelector("img");
-
+                            const p = label.querySelector('p');
+                            const img = label.querySelector('img');
                             if (varIndex === response.varIndex) {
                                 label.onmouseover = () => {
-                                    if (p) {
-                                        p.style.opacity = "0.7";
-                                    }
-                                    if (img) {
-                                        img.style.opacity = "0.5";
-                                    }
+                                    if (p) p.style.opacity = '0.7';
+                                    if (img) img.style.opacity = '0.5';
+                                    console.log('helper.js: Mouseover on correct answer label:', varIndex);
                                 };
                                 label.onmouseout = () => {
                                     if (p) {
-                                        p.style.color = "#666";
-                                        p.style.opacity = "1";
+                                        p.style.color = '#666';
+                                        p.style.opacity = '1';
                                     }
-                                    if (img) {
-                                        img.style.opacity = "1";
-                                    }
+                                    if (img) img.style.opacity = '1';
+                                    console.log('helper.js: Mouseout on correct answer label:', varIndex);
                                 };
                             } else {
                                 label.onmouseover = () => {
                                     if (p) {
-                                        p.style.color = "#666";
-                                        p.style.opacity = "1";
+                                        p.style.color = '#666';
+                                        p.style.opacity = '1';
                                     }
                                 };
                                 label.onmouseout = () => {
                                     if (p) {
-                                        p.style.color = "#666";
-                                        p.style.opacity = "1";
+                                        p.style.color = '#666';
+                                        p.style.opacity = '1';
                                     }
                                 };
                             }
                         });
+
+                        const navItems = document.querySelectorAll('.test-nav li');
+                        const navItem = navItems[response.qIndex];
+                        if (navItem) {
+                            navItem.classList.add('answered');
+                            const styleSheet = document.createElement('style');
+                            styleSheet.innerText = '.test-nav li.answered a:hover { cursor: text }';
+                            const existingStyle = document.querySelector('style[data-answered-style]');
+                            if (existingStyle) {
+                                existingStyle.remove();
+                                console.log('helper.js: Removed existing answered style');
+                            }
+                            styleSheet.setAttribute('data-answered-style', 'true');
+                            document.head.appendChild(styleSheet);
+                            console.log('helper.js: Added answered style for nav item:', response.qIndex);
+                        }
                     }
                 });
-
-                const navItems = document.querySelectorAll('.test-nav li');
-                const navItem = navItems[response.qIndex];
-                if (navItem) {
-                    navItem.classList.add('answered');
-                    const styleSheet = document.createElement('style');
-                    styleSheet.innerText = `
-                        .test-nav li.answered a:hover {
-                            cursor: text;
-                        }
-                    `;
-                    const existingStyle = document.querySelector('style[data-answered-style]');
-                    if (existingStyle) {
-                        existingStyle.remove();
-                    }
-                    styleSheet.setAttribute('data-answered-style', 'true');
-                    document.head.appendChild(styleSheet);
-                }
             }
         } catch (e) {
             console.error('helper.js: Error parsing response:', e);
         }
     };
 
-    socket.onerror = (error) => {
+    socket.onerror = error => {
         console.error('helper.js: WebSocket error:', error);
     };
 
     socket.onclose = () => {
-        console.log('helper.js: WebSocket closed, attempting to reconnect');
+        console.log('helper.js: WebSocket closed, attempting reconnect in 5s');
         setTimeout(() => {
             const newSocket = new WebSocket('wss://x-q63z.onrender.com');
             newSocket.onopen = () => {
                 console.log('helper.js: WebSocket reconnected');
                 newSocket.send(JSON.stringify({ role: 'helper' }));
                 setTimeout(() => {
+                    console.log('helper.js: Sending questions after reconnect');
                     sendQuestions();
                     console.log('helper.js: Setting interval for sendTimerUpdate after reconnect');
                     setInterval(() => {
@@ -218,6 +319,7 @@
             newSocket.onerror = socket.onerror;
             newSocket.onclose = socket.onclose;
             socket = newSocket;
+            console.log('helper.js: Replaced socket with new connection');
         }, 5000);
     };
 })();

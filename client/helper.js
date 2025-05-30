@@ -28,11 +28,11 @@
             type: 'timerUpdate',
             timer: timerText
         });
-        console.log('Отправка обновления таймера:', data, 'селектор:', timerElement?.tagName, timerElement?.id, timerElement?.className);
+        console.log('helper.js: Sending timer update:', data, 'selector:', timerElement?.tagName, timerElement?.id, timerElement?.className);
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(data);
         } else {
-            console.log('WebSocket не открыт:', socket.readyState);
+            console.log('helper.js: WebSocket not open:', socket.readyState);
         }
     }
 
@@ -62,21 +62,21 @@
                     timer: timerText
                 });
 
-                console.log('Отправка вопроса и вариантов с изображениями:', data);
+                console.log('helper.js: Sending question:', data);
                 socket.send(data);
             }
         });
     }
 
     socket.onopen = () => {
-        console.log('WebSocket подключен');
+        console.log('helper.js: WebSocket connected');
         socket.send(JSON.stringify({ role: 'helper' }));
         setTimeout(() => {
             sendQuestions();
         }, 2000);
-        console.log('Установка интервала для sendTimerUpdate');
+        console.log('helper.js: Setting interval for sendTimerUpdate');
         setInterval(() => {
-            console.log('Вызов sendTimerUpdate');
+            console.log('helper.js: Calling sendTimerUpdate');
             sendTimerUpdate();
         }, 1000);
     };
@@ -85,7 +85,7 @@
         let response;
         try {
             response = JSON.parse(event.data);
-            console.log('Получен ответ от exam:', response);
+            console.log('helper.js: Received response from exam:', response);
 
             if (response.answer && response.qIndex !== undefined) {
                 const processedResponse = {
@@ -94,10 +94,10 @@
                     answer: response.answer,
                     varIndex: response.varIndex,
                     clientId: response.clientId,
-                    answeredBy: response.answeredBy, // Сохраняем answeredBy
+                    answeredBy: response.answeredBy,
                     processedAnswer: true
                 };
-                console.log('Отправка обработанного ответа в exam:', processedResponse);
+                console.log('helper.js: Sending processed response to exam:', processedResponse);
                 socket.send(JSON.stringify(processedResponse));
 
                 const breadcrumbHeader = document.querySelector('.breadcrumb-header');
@@ -190,26 +190,26 @@
                 }
             }
         } catch (e) {
-            console.error('Ошибка парсинга ответа:', e);
+            console.error('helper.js: Error parsing response:', e);
         }
     };
 
     socket.onerror = (error) => {
-        console.error('Ошибка WebSocket:', error);
+        console.error('helper.js: WebSocket error:', error);
     };
 
     socket.onclose = () => {
-        console.log('WebSocket закрыт, пытаемся переподключиться');
+        console.log('helper.js: WebSocket closed, attempting to reconnect');
         setTimeout(() => {
             const newSocket = new WebSocket('wss://x-q63z.onrender.com');
             newSocket.onopen = () => {
-                console.log('WebSocket переподключен');
+                console.log('helper.js: WebSocket reconnected');
                 newSocket.send(JSON.stringify({ role: 'helper' }));
                 setTimeout(() => {
                     sendQuestions();
-                    console.log('Установка интервала для sendTimerUpdate после переподключения');
+                    console.log('helper.js: Setting interval for sendTimerUpdate after reconnect');
                     setInterval(() => {
-                        console.log('Вызов sendTimerUpdate');
+                        console.log('helper.js: Calling sendTimerUpdate');
                         sendTimerUpdate();
                     }, 1000);
                 }, 2000);

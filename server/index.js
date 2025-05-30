@@ -102,7 +102,7 @@ wss.on('connection', ws => {
                     answers: parsedMessage.answers
                 };
                 examData.questions.push(questionData);
-                examData.timer = parsedMessage.timer; // Обновляем таймер
+                examData.timer = parsedMessage.timer;
 
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
@@ -117,6 +117,20 @@ wss.on('connection', ws => {
                 if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
                     targetClient.ws.send(JSON.stringify(parsedMessage));
                 }
+                // Пересылаем ответ всем exam-клиентам как processedAnswer
+                wss.clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                        client.send(JSON.stringify({
+                            type: 'processedAnswer',
+                            qIndex: parsedMessage.qIndex,
+                            question: parsedMessage.question,
+                            answer: parsedMessage.answer,
+                            varIndex: parsedMessage.varIndex,
+                            clientId: parsedMessage.clientId,
+                            answeredBy: parsedMessage.answeredBy
+                        }));
+                    }
+                });
             }
 
             // Обработанный ответ от helper отправляем всем exam
@@ -132,7 +146,6 @@ wss.on('connection', ws => {
             if (parsedMessage.type === 'timerUpdate' && clients.get(clientId).role === 'helper') {
                 if (activeExams.has(clientId)) {
                     activeExams.get(clientId).timer = parsedMessage.timer;
-                    // Отправляем обновление времени всем клиентам с ролью exam
                     wss.clients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
                             client.send(JSON.stringify({
@@ -151,7 +164,7 @@ wss.on('connection', ws => {
 
     ws.on('close', () => {
         console.log('Клиент отключился:', clientId);
-        clearInterval(pingInterval); // Очищаем интервал пинга
+        clearInterval(pingInterval);
         const client = clients.get(clientId);
 
         if (client && client.role === 'helper') {
@@ -169,8 +182,8 @@ wss.on('connection', ws => {
     // Проверка неактивных клиентов каждые 60 секунд
     setInterval(() => {
         clients.forEach((client, id) => {
-            const inactiveTime = (Date.now() - client.lastActive) / 1000; // В секундах
-            if (inactiveTime > 60 && client.ws.readyState !== WebSocket.OPEN) { // 60 секунд неактивности
+            const inactiveTime = (Date.now() - client.lastActive) / 1000;
+            if (inactiveTime > 60 && client.ws.readyState !== WebSocket.OPEN) {
                 console.log(`Клиент ${id} неактивен более 60 секунд, удаление`);
                 if (client.role === 'helper') {
                     activeExams.delete(id);

@@ -47,7 +47,7 @@ wss.on('connection', ws => {
     });
 
     ws.on('message', async message => {
-        console.log('index.js: Received message:', message);
+        console.log('index.js: Received message:', message.toString());
 
         try {
             const parsedMessage = JSON.parse(message);
@@ -79,7 +79,14 @@ wss.on('connection', ws => {
                     const examsData = Array.from(activeExams.entries()).map(([examClientId, examData]) => ({
                         clientId: examClientId,
                         userInfo: examData.userInfo,
-                        questions: examData.questions,
+                        questions: examData.questions.map(q => ({
+                            qIndex: q.qIndex,
+                            question: q.question,
+                            questionImg: q.questionImg,
+                            answers: q.answers,
+                            selectedAnswer: q.selectedAnswer,
+                            answeredBy: q.answeredBy,
+                        })),
                         timer: examData.timer
                     }));
                     console.log('index.js: Sending initialState to exam client:', examsData);
@@ -101,9 +108,14 @@ wss.on('connection', ws => {
                     qIndex: parsedMessage.qIndex,
                     question: parsedMessage.question,
                     questionImg: parsedMessage.questionImg,
-                    answers: parsedMessage.answers
+                    answers: parsedMessage.answers,
+                    selectedAnswer: null,
+                    answeredBy: null,
                 };
-                examData.questions.push(questionData);
+                const existingQuestion = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
+                if (!existingQuestion) {
+                    examData.questions.push(questionData);
+                }
                 examData.timer = parsedMessage.timer;
 
                 wss.clients.forEach(client => {
@@ -121,6 +133,15 @@ wss.on('connection', ws => {
                 if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
                     console.log('index.js: Sending answer to helper:', parsedMessage.clientId);
                     targetClient.ws.send(JSON.stringify(parsedMessage));
+                }
+                // Сохраняем ответ в activeExams
+                if (activeExams.has(parsedMessage.clientId)) {
+                    const examData = activeExams.get(parsedMessage.clientId);
+                    const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
+                    if (question) {
+                        question.selectedAnswer = parsedMessage.answer;
+                        question.answeredBy = parsedMessage.answeredBy;
+                    }
                 }
                 // Пересылаем ответ всем exam-клиентам как processedAnswer
                 wss.clients.forEach(client => {
@@ -150,6 +171,15 @@ wss.on('connection', ws => {
             // Обработанный ответ от helper отправляем всем exam
             if (parsedMessage.processedAnswer && clients.get(clientId).role === 'helper') {
                 console.log('index.js: Broadcasting processedAnswer from helper:', parsedMessage);
+                // Сохраняем ответ в activeExams
+                if (activeExams.has(parsedMessage.clientId)) {
+                    const examData = activeExams.get(parsedMessage.clientId);
+                    const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
+                    if (question) {
+                        question.selectedAnswer = parsedMessage.answer;
+                        question.answeredBy = parsedMessage.answeredBy;
+                    }
+                }
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
                         client.send(JSON.stringify(parsedMessage));

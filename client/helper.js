@@ -1,9 +1,4 @@
 (async () => {
-    // Инициализация Supabase клиента
-    const { createClient } = supabase;
-    const supabaseClient = createClient('https://ledxbbsylvxnfjogwkzf.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlZHhiYnN5bHZ4bmZqb2d3a3pmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTE0NTUxOCwiZXhwIjoyMDU2NzIxNTE4fQ.A9wvdnZmX_3wu9Pvhpy0lR3ds8jTNA6tKe59YaB_RGE');
-    console.log('helper.js: Supabase client initialized');
-
     const socket = new WebSocket('wss://x-q63z.onrender.com');
 
     function hideBannedScreen() {
@@ -29,51 +24,6 @@
             play: function () {}
         };
     };
-
-    async function logToSupabase(questionData, assistantAnswer = null) {
-        const { qIndex, question, questionImg, answers, userInfo, timer } = questionData;
-        try {
-            const { data, error } = await supabaseClient
-                .from('exam_questions')
-                .upsert({
-                    question_text: question,
-                    question_img: questionImg,
-                    answers: answers,
-                    assistant_answer: assistantAnswer,
-                    exam_info: userInfo,
-                    timer: timer,
-                    updated_at: new Date().toISOString()
-                }, {
-                    onConflict: ['question_text', 'question_img']
-                });
-            if (error) {
-                console.error('helper.js: Supabase upsert error:', error);
-            } else {
-                console.log('helper.js: Logged to Supabase:', data);
-            }
-        } catch (e) {
-            console.error('helper.js: Supabase logging failed:', e);
-        }
-    }
-
-    async function checkSupabaseForAnswers(questionText, questionImg) {
-        try {
-            const { data, error } = await supabaseClient
-                .from('exam_questions')
-                .select('assistant_answer, answers')
-                .or(`question_text.eq.${questionText},question_img.eq.${questionImg}`)
-                .not('assistant_answer', 'is', null);
-            if (error) {
-                console.error('helper.js: Supabase query error:', error);
-                return null;
-            }
-            console.log('helper.js: Found matching question in Supabase:', data);
-            return data.length > 0 ? data[0] : null;
-        } catch (e) {
-            console.error('helper.js: Supabase query failed:', e);
-            return null;
-        }
-    }
 
     function highlightAnswer(qIndex, varIndex) {
         document.querySelectorAll('.test-table').forEach((questionEl, index) => {
@@ -110,13 +60,13 @@
         }
     }
 
-    async function sendQuestions() {
+    function sendQuestions() {
         const questions = document.querySelectorAll('.test-table');
         const breadcrumbText = document.querySelector('.breadcrumb-header')?.innerText.trim() || '';
         const timerText = document.querySelector('#timer')?.innerText.trim() || '00:00:00';
         console.log('helper.js: Found questions:', questions.length, 'breadcrumb:', breadcrumbText, 'timer:', timerText);
 
-        for (const [qInd, questionEl] of questions.entries()) {
+        questions.forEach((questionEl, qInd) => {
             const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || '';
             const questionImg = questionEl.querySelector('.test-question img')?.src || '';
             const answers = [];
@@ -140,20 +90,8 @@
                 };
                 console.log('helper.js: Sending question data:', questionData);
                 socket.send(JSON.stringify(questionData));
-
-                // Логирование вопроса в Supabase
-                await logToSupabase(questionData);
-
-                // Проверка на существование ответа в Supabase
-                const existingAnswer = await checkSupabaseForAnswers(questionText, questionImg);
-                if (existingAnswer && existingAnswer.assistant_answer) {
-                    const varIndex = existingAnswer.answers.findIndex(ans => ans.text === existingAnswer.assistant_answer.answer);
-                    if (varIndex !== -1) {
-                        highlightAnswer(qInd, varIndex);
-                    }
-                }
             }
-        }
+        });
     }
 
     socket.onopen = () => {
@@ -189,19 +127,8 @@
                 console.log('helper.js: Sending processed response to exam:', processedResponse);
                 socket.send(JSON.stringify(processedResponse));
 
-                // Логирование ответа ассистента в Supabase
-                await logToSupabase({
-                    qIndex: response.qIndex,
-                    question: response.question,
-                    questionImg: null,
-                    answers: [],
-                    userInfo: null,
-                    timer: null
-                }, {
-                    answer: response.answer,
-                    varIndex: response.varIndex,
-                    answeredBy: response.answeredBy
-                });
+                // Выделение ответа ассистента
+                highlightAnswer(response.qIndex, response.varIndex);
 
                 const breadcrumbHeader = document.querySelector('.breadcrumb-header');
                 if (breadcrumbHeader) {
@@ -225,7 +152,7 @@
 
                 document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
                     if (qIndex === response.qIndex) {
-                        const labels = questionEl.querySelectorAll('.test-answers label');
+                const labels = questionEl.querySelectorAll('.test-answers label');
                         console.log('helper.js: Processing question', qIndex, 'with', labels.length, 'labels');
                         labels.forEach((label) => {
                             const p = label.querySelector('p');
@@ -288,6 +215,12 @@
                         }
                     }
                 });
+            }
+
+            // Обработка сохраненного ответа из Supabase
+            if (response.type === 'savedAnswer' && response.qIndex !== undefined) {
+                console.log('helper.js: Received saved answer from server:', response);
+                highlightAnswer(response.qIndex, response.varIndex);
             }
         } catch (e) {
             console.error('helper.js: Error parsing response:', e);

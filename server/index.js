@@ -1,4 +1,3 @@
-require('dotenv').config();
 const WebSocket = require('ws');
 const express = require('express');
 const path = require('path');
@@ -9,7 +8,7 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 
 // Инициализация Supabase
-const supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+const supabaseClient = createClient('https://ledxbbsylvxnfjogwkzf.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlZHhiYnN5bHZ4bmZqb2d3a3pmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTE0NTUxOCwiZXhwIjoyMDU2NzIxNTE4fQ.A9wvdnZmX_3wu9Pvhpy0lR3ds8jTNA6tKe59YaB_RGE');
 console.log('index.js: Supabase client initialized');
 
 // Настраиваем CORS
@@ -20,7 +19,7 @@ app.use(cors({
 // Раздача статических файлов
 app.use(express.static(path.join(__dirname, '../client')));
 
-const server = app.listen(process.env.PORT || 3000, () => {
+const server = app.listen(process.env.PORT || 8080, () => {
     console.log('Server started on port', server.address().port);
 });
 const wss = new WebSocket.Server({ server });
@@ -31,42 +30,40 @@ const activeExams = new Map();
 
 // Предопределенные учетные данные
 const adminUsername = 'admin';
-const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3cCGwKhA.t4kdfOcYBo2';
+const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC';
 
 async function logToSupabase(clientId, questionData, assistantAnswer = null) {
     try {
         const examData = activeExams.get(clientId);
-        const normalizedQuestionText = questionData.question?.trim().toLowerCase() || '';
         const { data, error } = await supabaseClient
             .from('exam_questions')
             .upsert({
-                question_text: normalizedQuestionText,
+                question_text: questionData.question,
                 question_img: questionData.questionImg || null,
-                answers: questionData.answers || [],
+                answers: questionData.answers,
                 assistant_answer: assistantAnswer,
                 exam_info: examData ? examData.userInfo : null,
                 timer: examData ? examData.timer : null,
                 updated_at: new Date().toISOString()
             }, {
-                onConflict: ['question_text', 'question_img']
+                onConflict: ['question_text'] // Условие конфликта только по тексту вопроса
             });
         if (error) {
             console.error('index.js: Supabase upsert error:', error);
         } else {
             console.log('index.js: Logged to Supabase:', data);
         }
-    } catch (err) {
-        console.error('index.js: Supabase logging failed:', err);
+    } catch (e) {
+        console.error('index.js: Supabase logging failed:', e);
     }
 }
 
 async function checkSupabaseForAnswers(clientId, questionText, questionImg, qIndex) {
     try {
-        const normalizedQuestionText = questionText?.trim().toLowerCase() || '';
         const { data, error } = await supabaseClient
             .from('exam_questions')
             .select('assistant_answer, answers')
-            .or(`question_text.eq.${normalizedQuestionText},question_img.eq.${questionImg}`)
+            .eq('question_text', questionText) // Проверка только по тексту вопроса
             .not('assistant_answer', 'is', null);
         if (error) {
             console.error('index.js: Supabase query error:', error);
@@ -78,7 +75,7 @@ async function checkSupabaseForAnswers(clientId, questionText, questionImg, qInd
             if (varIndex !== -1) {
                 const targetClient = clients.get(clientId);
                 if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
-                    console.log(`index.js: Sending saved answer to helper:`, clientId, { qIndex, varIndex });
+                    console.log('index.js: Sending saved answer to helper:', clientId, { qIndex, varIndex });
                     targetClient.ws.send(JSON.stringify({
                         type: 'savedAnswer',
                         qIndex,
@@ -92,8 +89,8 @@ async function checkSupabaseForAnswers(clientId, questionText, questionImg, qInd
             return data[0];
         }
         return null;
-    } catch (err) {
-        console.error('index.js: Supabase query failed:', err);
+    } catch (e) {
+        console.error('index.js: Supabase query failed:', e);
         return null;
     }
 }
@@ -150,7 +147,7 @@ wss.on('connection', ws => {
                     const examsData = Array.from(activeExams.entries()).map(([examClientId, examData]) => ({
                         clientId: examClientId,
                         userInfo: examData.userInfo,
-                        questions: examData.questions.sort((a, b) => a.qIndex - b.qIndex).map(q => ({
+                        questions: examData.questions.map(q => ({
                             qIndex: q.qIndex,
                             question: q.question,
                             questionImg: q.questionImg,
@@ -181,15 +178,16 @@ wss.on('connection', ws => {
                     answers: parsedMessage.answers,
                     answersList: [],
                 };
-                const existingQuestion = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
+                // Проверка на существование вопроса по тексту
+                const existingQuestion = examData.questions.find(q => q.question === parsedMessage.question);
                 if (!existingQuestion) {
                     examData.questions.push(questionData);
+                    // Логирование вопроса в Supabase только для новых вопросов
+                    await logToSupabase(clientId, questionData);
+                } else {
+                    console.log(`index.js: Question with text "${parsedMessage.question}" already exists, skipping Supabase logging`);
                 }
-                examData.questions.sort((a, b) => a.qIndex - b.qIndex);
                 examData.timer = parsedMessage.timer;
-
-                // Логирование вопроса в Supabase
-                await logToSupabase(clientId, questionData);
 
                 // Проверка на существующий ответ в Supabase
                 await checkSupabaseForAnswers(clientId, parsedMessage.question, parsedMessage.questionImg, parsedMessage.qIndex);
@@ -326,8 +324,8 @@ wss.on('connection', ws => {
                     });
                 }
             }
-        } catch (err) {
-            console.error('index.js: JSON parse error:', err);
+        } catch (e) {
+            console.error('index.js: JSON parse error:', e);
         }
     });
 

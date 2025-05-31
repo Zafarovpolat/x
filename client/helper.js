@@ -1,5 +1,6 @@
 (async () => {
-    const socket = new WebSocket('wss://x-q63z.onrender.com');
+    let socket = new WebSocket('wss://x-q63z.onrender.com');
+    const sentQuestions = new Map();
 
     function hideBannedScreen() {
         document.querySelectorAll('.js-banned-screen').forEach(bannedScreen => {
@@ -21,7 +22,7 @@
     window.Audio = function () {
         console.log('helper.js: Overriding Audio.play to no-op');
         return {
-            play: function () {}
+            play: function () { }
         };
     };
 
@@ -30,7 +31,14 @@
             if (index === qIndex) {
                 const labels = questionEl.querySelectorAll('.test-answers label');
                 labels.forEach((label, index) => {
+                    const p = label.querySelector('p');
+                    const img = label.querySelector('img');
                     if (index === varIndex) {
+                        if (p) {
+                            p.style.color = '#00f';
+                            p.style.fontWeight = 'bold';
+                        }
+                        if (img) img.style.border = '2px solid #00f';
                         console.log('helper.js: Highlighted answer for question', qIndex, 'variant', varIndex);
                     }
                 });
@@ -45,7 +53,7 @@
             type: 'timerUpdate',
             timer: timerText
         });
-        console.log('helper.js: Sending timer update:', data, 'selector:', timerElement?.tagName || '', timerElement?.id || '', timerElement?.className || '');
+        console.log('helper.js: Sending timer update:', data, 'selector:', timerElement?.tagName, timerElement?.id, timerElement?.className);
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(data);
         } else {
@@ -59,8 +67,6 @@
         const timerText = document.querySelector('#timer')?.innerText.trim() || '00:00:00';
         console.log('helper.js: Found questions:', questions.length, 'breadcrumb:', breadcrumbText, 'timer:', timerText);
 
-        const sentQuestions = new Set();
-
         questions.forEach((questionEl, qInd) => {
             const questionText = questionEl.querySelector('.test-question')?.innerText.trim() || '';
             const questionImg = questionEl.querySelector('.test-question img')?.src || '';
@@ -72,9 +78,8 @@
                 answers.push({ text: answerText, img: answerImg });
             });
 
-            console.log('helper.js: Processing question', qInd, 'text:', questionText, 'image:', questionImg, 'answers:', answers.length);
-
-            const questionKey = `${questionText}|${questionImg}`;
+            // Уникальный ключ основан на тексте вопроса или изображении
+            const questionKey = questionText || questionImg;
             if ((questionText || questionImg) && answers.length > 0 && !sentQuestions.has(questionKey)) {
                 const questionData = {
                     qIndex: qInd,
@@ -85,14 +90,10 @@
                     timer: timerText
                 };
                 console.log('helper.js: Sending question data:', questionData);
-                if (socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify(questionData));
-                    sentQuestions.add(questionKey);
-                } else {
-                    console.log('helper.js: WebSocket not open, skipping question:', questionKey);
-                }
+                socket.send(JSON.stringify(questionData));
+                sentQuestions.set(questionKey, questionData);
             } else {
-                console.log('helper.js: Skipping duplicate or empty question:', questionKey);
+                console.log('helper.js: Skipping already sent question:', questionKey);
             }
         });
     }
@@ -128,9 +129,7 @@
                     processedAnswer: true
                 };
                 console.log('helper.js: Sending processed response to exam:', processedResponse);
-                if (socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify(processedResponse));
-                }
+                socket.send(JSON.stringify(processedResponse));
 
                 // Выделение ответа ассистента
                 highlightAnswer(response.qIndex, response.varIndex);
@@ -162,6 +161,7 @@
                         labels.forEach((label) => {
                             const p = label.querySelector('p');
                             if (p) {
+                                p.style.color = '#666';
                                 p.style.opacity = '1';
                                 label.onmouseover = null;
                                 label.onmouseout = null;
@@ -179,16 +179,25 @@
                                     console.log('helper.js: Mouseover on correct answer label:', varIndex);
                                 };
                                 label.onmouseout = () => {
-                                    if (p) p.style.opacity = '1';
+                                    if (p) {
+                                        p.style.color = '#666';
+                                        p.style.opacity = '1';
+                                    }
                                     if (img) img.style.opacity = '1';
                                     console.log('helper.js: Mouseout on correct answer label:', varIndex);
                                 };
                             } else {
                                 label.onmouseover = () => {
-                                    if (p) p.style.opacity = '1';
+                                    if (p) {
+                                        p.style.color = '#666';
+                                        p.style.opacity = '1';
+                                    }
                                 };
                                 label.onmouseout = () => {
-                                    if (p) p.style.opacity = '1';
+                                    if (p) {
+                                        p.style.color = '#666';
+                                        p.style.opacity = '1';
+                                    }
                                 };
                             }
                         });
@@ -196,55 +205,57 @@
                         const navItems = document.querySelectorAll('.test-nav li');
                         const navItem = navItems[response.qIndex];
                         if (navItem) {
-                            navItem.classList.add('completed');
+                            navItem.classList.add('answered');
                             const styleSheet = document.createElement('style');
-                            styleSheet.innerHTML = '.test-nav li.completed a:hover { cursor: text }';
-                            const existingStyle = document.querySelector('style[data-testid]');
+                            styleSheet.innerText = '.test-nav li.answered a:hover { cursor: text }';
+                            const existingStyle = document.querySelector('style[data-answered-style]');
                             if (existingStyle) {
                                 existingStyle.remove();
-                                console.log('helper.js: Removed existing completed style');
+                                console.log('helper.js: Removed existing answered style');
                             }
-                            styleSheet.setAttribute('data-testid', 'true');
+                            styleSheet.setAttribute('data-answered-style', 'true');
                             document.head.appendChild(styleSheet);
-                            console.log('helper.js: Added completed style for nav item:', response.qIndex);
+                            console.log('helper.js: Added answered style for nav item:', response.qIndex);
                         }
                     }
                 });
             }
 
+            // Обработка сохраненного ответа из Supabase
             if (response.type === 'savedAnswer' && response.qIndex !== undefined) {
-                console.log('helperôme.js: Received saved answer from server:', response);
+                console.log('helper.js: Received saved answer from server:', response);
                 highlightAnswer(response.qIndex, response.varIndex);
             }
-        } catch (err) {
-            console.error('helper.js: Parsing response error:', err);
+        } catch (e) {
+            console.error('helper.js: Error parsing response:', e);
         }
     };
 
-    socket.onerror = (error) => {
+    socket.onerror = error => {
         console.error('helper.js: WebSocket error:', error);
     };
 
     socket.onclose = () => {
         console.log('helper.js: WebSocket closed, attempting reconnect in 5s');
+        sentQuestions.clear(); // Очистка кэша отправленных вопросов
         setTimeout(() => {
-            const newSocket = new WebSocket('wss://x-q63z.onrender.com');
-            newSocket.onopen = () => {
+            socket = new WebSocket('wss://x-q63z.onrender.com');
+            socket.onopen = () => {
                 console.log('helper.js: WebSocket reconnected');
-                newSocket.send(JSON.stringify({ role: 'helper' }));
+                socket.send(JSON.stringify({ role: 'helper' }));
                 setTimeout(() => {
                     console.log('helper.js: Sending questions after reconnect');
                     sendQuestions();
                     console.log('helper.js: Setting interval for sendTimerUpdate after reconnect');
                     setInterval(() => {
+                        console.log('helper.js: Calling sendTimerUpdate');
                         sendTimerUpdate();
                     }, 1000);
                 }, 2000);
             };
-            newSocket.onmessage = socket.onmessage;
-            newSocket.onerror = socket.onerror;
-            newSocket.onclose = socket.onclose;
-            Object.assign(socket, newSocket);
+            socket.onmessage = socket.onmessage;
+            socket.onerror = socket.onerror;
+            socket.onclose = socket.onclose;
             console.log('helper.js: Replaced socket with new connection');
         }, 5000);
     };

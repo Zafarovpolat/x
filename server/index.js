@@ -139,47 +139,38 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
 }
 
 async function checkAndUpsertQuestion(questionData) {
-  try {
-    // Проверка по изображению
-    if (questionData.questionImg) {
-      const { data: existingByImage } = await supabaseClient
-        .from('exam_questions')
-        .select('id')
-        .eq('question_img', questionData.questionImg)
-        .not('question_img', 'is', null)
-        .maybeSingle();
+    try {
+        // Убедимся, что передаем только существующие колонки
+        const supabaseData = {
+            question_text: questionData.question,
+            question_img: questionData.questionImg,
+            answers: questionData.answers,
+            exam_info: questionData.exam_info,
+            timer: questionData.timer,
+            updated_at: questionData.updated_at,
+            q_index: questionData.qIndex, // Используем имя колонки из Supabase
+            text_hash: questionData.text_hash
+        };
 
-      if (existingByImage) return existingByImage.id;
+        // Удаляем undefined поля
+        Object.keys(supabaseData).forEach(key => {
+            if (supabaseData[key] === undefined) {
+                delete supabaseData[key];
+            }
+        });
+
+        const { data, error } = await supabaseClient
+            .from('exam_questions')
+            .upsert(supabaseData)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data.id;
+    } catch (error) {
+        console.error('Error in checkAndUpsertQuestion:', error);
+        return null;
     }
-
-    // Проверка по тексту
-    if (questionData.question) {
-      const textHash = CryptoJS.SHA256(normalizeText(questionData.question)).toString();
-      questionData.text_hash = textHash;
-
-      const { data: existingByText } = await supabaseClient
-        .from('exam_questions')
-        .select('id')
-        .eq('text_hash', textHash)
-        .maybeSingle();
-
-      if (existingByText) return existingByText.id;
-    }
-
-    // Вставка нового вопроса
-    const { data, error } = await supabaseClient
-      .from('exam_questions')
-      .upsert(questionData)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data.id;
-
-  } catch (error) {
-    console.error('Error in checkAndUpsertQuestion:', error);
-    return null;
-  }
 }
 
 async function checkSupabaseForAnswers(clientId, questionText, questionImg, qIndex) {

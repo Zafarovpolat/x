@@ -13,7 +13,7 @@ console.log('index.js: Supabase client initialized');
 
 // Настраиваем CORS
 app.use(cors({
-    origin: '*', // TODO: Заменить на конкретные домены для безопасности
+    origin: '*',
 }));
 
 // Раздача статических файлов
@@ -40,12 +40,12 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             question_img: questionData.questionImg || null,
             answers: questionData.answers,
             exam_info: examData ? examData.userInfo : null,
-            timer: examData ? examData.timer : null,
+            timer: examData ? examData.timer || '00:00:00' : '00:00:00',
             updated_at: new Date().toISOString()
         };
 
         if (assistantAnswer) {
-            // Получаем текущие данные вопроса
+            // Получаем текущие данные
             const { data: existingData, error: fetchError } = await supabaseClient
                 .from('exam_questions')
                 .select('assistant_answer')
@@ -57,24 +57,24 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
                 return;
             }
 
-            // Инициализируем массив ответов
             let currentAnswers = existingData?.assistant_answer || [];
 
-            // Удаляем предыдущий ответ этого пользователя, если он есть
-            currentAnswers = currentAnswers.filter(ans => ans.answeredBy !== assistantAnswer.answeredBy);
+            // Удаляем все предыдущие ответы этого пользователя для этого вопроса
+            currentAnswers = currentAnswers.filter(ans =>
+                ans.answeredBy !== assistantAnswer.answeredBy
+            );
 
             // Добавляем новый ответ
             currentAnswers.push({
                 answer: assistantAnswer.answer,
                 varIndex: assistantAnswer.varIndex,
-                answeredBy: assistantAnswer.answeredBy
+                answeredBy: assistantAnswer.answeredBy,
+                timestamp: new Date().toISOString()
             });
 
-            // Обновляем данные для upsert
             upsertData.assistant_answer = currentAnswers;
         }
 
-        // Выполняем upsert
         const { data, error } = await supabaseClient
             .from('exam_questions')
             .upsert(upsertData, {
@@ -85,7 +85,7 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
         if (error) {
             console.error('index.js: Supabase upsert error:', error);
         } else {
-            console.log('index.js: Logged to Supabase:', data);
+            console.log('index.js: Successfully updated Supabase:', data);
         }
     } catch (e) {
         console.error('index.js: Supabase logging failed:', e);
@@ -235,103 +235,54 @@ wss.on('connection', ws => {
                 });
             }
 
-            // Ответ от exam отправляем конкретному helper
-            if (parsedMessage.answer && clients.get(clientId).role === 'exam') {
-                console.log('index.js: Processing answer from exam:', parsedMessage);
-                const targetClient = clients.get(parsedMessage.clientId);
-                if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
-                    console.log('index.js: Sending answer to helper:', parsedMessage.clientId);
-                    targetClient.ws.send(JSON.stringify(parsedMessage));
-                }
-                if (activeExams.has(parsedMessage.clientId)) {
-                    const examData = activeExams.get(parsedMessage.clientId);
-                    const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
-                    if (question) {
-                        if (!question.answersList) question.answersList = [];
-                        const existingAnswer = question.answersList.find(a => a.answeredBy === parsedMessage.answeredBy);
-                        if (existingAnswer) {
-                            existingAnswer.answer = parsedMessage.answer;
-                        } else {
-                            question.answersList.push({
-                                answer: parsedMessage.answer,
-                                answeredBy: parsedMessage.answeredBy
-                            });
-                        }
-                    }
-                    await logToSupabase(parsedMessage.clientId, {
-                        qIndex: parsedMessage.qIndex,
-                        question: parsedMessage.question,
-                        questionImg: null,
-                        answers: question ? question.answers : [],
-                    }, {
-                        answer: parsedMessage.answer,
-                        varIndex: parsedMessage.varIndex,
-                        answeredBy: parsedMessage.answeredBy
-                    });
-                }
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
-                        console.log('index.js: Broadcasting processedAnswer to exam client:', client.clientId, {
-                            type: 'processedAnswer',
-                            qIndex: parsedMessage.qIndex,
-                            question: parsedMessage.question,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex,
-                            clientId: parsedMessage.clientId,
-                            answeredBy: parsedMessage.answeredBy
-                        });
-                        client.send(JSON.stringify({
-                            type: 'processedAnswer',
-                            qIndex: parsedMessage.qIndex,
-                            question: parsedMessage.question,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex,
-                            clientId: parsedMessage.clientId,
-                            answeredBy: parsedMessage.answeredBy
-                        }));
-                    }
-                });
-            }
+            // Обработка обновления ответа от Assistant
+            if (parsedMessage.type === 'answerUpdate' && parsedMessage.clientId && parsedMessage.answer) {
+                console.log('index.js: Processing answer update:', parsedMessage);
+                const { clientId, qIndex, question, answer, varIndex, answeredBy } = parsedMessage;
 
-            // Обработанный ответ от helper отправляем всем exam
-            if (parsedMessage.processedAnswer && clients.get(clientId).role === 'helper') {
-                console.log('index.js: Broadcasting processedAnswer from helper:', parsedMessage);
-                if (activeExams.has(parsedMessage.clientId)) {
-                    const examData = activeExams.get(parsedMessage.clientId);
-                    const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
+                // Обновляем локальное состояние
+                if (activeExams.has(clientId)) {
+                    const examData = activeExams.get(clientId);
+                    const question = examData.questions.find(q => q.qIndex === qIndex);
                     if (question) {
                         if (!question.answersList) question.answersList = [];
-                        const existingAnswer = question.answersList.find(a => a.answeredBy === parsedMessage.answeredBy);
+                        const existingAnswer = question.answersList.find(a => a.answeredBy === answeredBy);
                         if (existingAnswer) {
-                            existingAnswer.answer = parsedMessage.answer;
+                            existingAnswer.answer = answer;
+                            existingAnswer.varIndex = varIndex;
                         } else {
                             question.answersList.push({
-                                answer: parsedMessage.answer,
-                                answeredBy: parsedMessage.answeredBy
+                                answer,
+                                varIndex,
+                                answeredBy
                             });
                         }
                     }
-                    await logToSupabase(parsedMessage.clientId, {
-                        qIndex: parsedMessage.qIndex,
-                        question: parsedMessage.question,
-                        questionImg: null,
-                        answers: question ? question.answers : [],
-                    }, {
-                        answer: parsedMessage.answer,
-                        varIndex: parsedMessage.varIndex,
-                        answeredBy: parsedMessage.answeredBy
-                    });
                 }
+
+                // Логируем в Supabase
+                await logToSupabase(clientId, {
+                    qIndex,
+                    question,
+                    questionImg: null,
+                    answers: question ? question.answers : [],
+                }, {
+                    answer,
+                    varIndex,
+                    answeredBy
+                });
+
+                // Уведомляем всех exam клиентов об обновлении
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
                         client.send(JSON.stringify({
                             type: 'processedAnswer',
-                            qIndex: parsedMessage.qIndex,
-                            question: parsedMessage.question,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex,
-                            clientId: parsedMessage.clientId,
-                            answeredBy: parsedMessage.answeredBy
+                            qIndex,
+                            question,
+                            answer,
+                            varIndex,
+                            clientId,
+                            answeredBy
                         }));
                     }
                 });
@@ -355,7 +306,7 @@ wss.on('connection', ws => {
                 }
             }
         } catch (e) {
-            console.error('index.js: JSON parse error:', e);
+            console.error('index.js: Error processing message:', e);
         }
     });
 

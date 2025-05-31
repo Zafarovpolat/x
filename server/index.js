@@ -37,7 +37,7 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
         const examData = activeExams.get(clientId);
         const upsertData = {
             question_text: questionData.question,
-            question_img: questionData.questionImg || null,
+            question_img: questionData.questionImg || null, // Сохраняем изображение вопроса
             answers: questionData.answers,
             exam_info: examData ? examData.userInfo : null,
             timer: examData ? examData.timer : null,
@@ -48,13 +48,18 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             // Получаем текущие данные вопроса
             const { data: existingData, error: fetchError } = await supabaseClient
                 .from('exam_questions')
-                .select('assistant_answer')
-                .eq('question_text', questionData.question)
+                .select('assistant_answer, question_img') // Добавляем question_img в выборку
+                .or(`question_text.eq.${questionData.question},question_img.eq.${questionData.questionImg}`)
                 .maybeSingle();
 
             if (fetchError && !fetchError.message.includes('No rows found')) {
                 console.error('index.js: Supabase fetch error:', fetchError);
                 return;
+            }
+
+            // Сохраняем существующее изображение вопроса, если оно есть
+            if (existingData?.question_img) {
+                upsertData.question_img = existingData.question_img;
             }
 
             // Инициализируем массив ответов
@@ -74,11 +79,11 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             upsertData.assistant_answer = currentAnswers;
         }
 
-        // Выполняем upsert
+        // Выполняем upsert с условием конфликта по question_text ИЛИ question_img
         const { data, error } = await supabaseClient
             .from('exam_questions')
             .upsert(upsertData, {
-                onConflict: 'question_text'
+                onConflict: 'question_text,question_img' // Обновляем при конфликте по любому из полей
             })
             .select();
 

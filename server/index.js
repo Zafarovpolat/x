@@ -32,14 +32,17 @@ const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkd
 
 // Enhanced string escaping for Supabase
 const escapeSupabaseString = (str) => {
-    if (!str) return '';
-    return str
-        .replace(/"/g, '""') // Escape quotes
-        .replace(/\n/g, '\\n') // Escape newlines
-        .replace(/;/g, '\\;') // Escape semicolons
-        .replace(/\+/g, '\\+') // Escape plus signs
-        .replace(/,/g, '\\,') // Escape commas
-        .replace(/\\/g, '\\\\'); // Escape backslashes
+  if (!str) return '';
+  // Сначала экранируем обратные слеши, затем остальное
+  return str
+    .replace(/\\/g, '\\\\') // Экранируем обратные слеши
+    .replace(/"/g, '\\"')   // Экранируем кавычки
+    .replace(/\n/g, '\\n')  // Экранируем переносы строк
+    .replace(/\r/g, '\\r')  // Экранируем возврат каретки
+    .replace(/\t/g, '\\t')  // Экранируем табуляцию
+    .replace(/\+/g, '\\+')  // Экранируем плюсы
+    .replace(/,/g, '\\,')   // Экранируем запятые
+    .replace(/;/g, '\\;');  // Экранируем точки с запятой
 };
 
 async function logToSupabase(clientId, questionData, assistantAnswer = null) {

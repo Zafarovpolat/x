@@ -140,6 +140,11 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
 
 async function checkAndUpsertQuestion(questionData) {
   try {
+    // Генерация хеша для текста вопроса
+    const textHash = questionData.question 
+      ? CryptoJS.SHA256(normalizeText(questionData.question)).toString()
+      : null;
+
     const supabaseData = {
       question_text: questionData.question,
       question_img: questionData.questionImg,
@@ -147,8 +152,8 @@ async function checkAndUpsertQuestion(questionData) {
       exam_info: questionData.exam_info,
       timer: questionData.timer,
       updated_at: new Date().toISOString(),
-      q_index: questionData.qIndex, // Используем точное имя колонки из БД
-      text_hash: questionData.textHash
+      q_index: questionData.qIndex,
+      text_hash: textHash
     };
 
     // Удаляем undefined значения
@@ -160,14 +165,20 @@ async function checkAndUpsertQuestion(questionData) {
 
     const { data, error } = await supabaseClient
       .from('exam_questions')
-      .upsert(supabaseData, { onConflict: 'text_hash' })
+      .upsert(supabaseData, {
+        onConflict: 'text_hash' // Теперь это поле имеет UNIQUE-ограничение
+      })
       .select()
       .single();
 
     if (error) throw error;
     return data.id;
   } catch (error) {
-    console.error('Error in checkAndUpsertQuestion:', error);
+    console.error('Error in checkAndUpsertQuestion:', {
+      message: error.message,
+      code: error.code,
+      details: error.details
+    });
     return null;
   }
 }

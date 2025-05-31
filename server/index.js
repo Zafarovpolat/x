@@ -7,13 +7,13 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
-// Инициализация Supabase
+// Initialize Supabase
 const supabaseClient = createClient('https://ledxbbsylvxnfjogwkzf.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlZHhiYnN5bHZ4bmZqb2d3a3pmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTE0NTUxOCwiZXhwIjoyMDU2NzIxNTE4fQ.A9wvdnZmX_3wu9Pvhpy0lR3ds8jTNA6tKe59YaB_RGE');
 console.log('index.js: Supabase client initialized');
 
-// Настраиваем CORS
+// Configure CORS
 app.use(cors({
-    origin: '*', // TODO: Заменить на конкретные домены
+    origin: '*', // TODO: Replace with specific domains
 }));
 
 app.use(express.static(path.join(__dirname, '../client')));
@@ -25,38 +25,43 @@ const wss = new WebSocket.Server({ server });
 
 const clients = new Map();
 const activeExams = new Map();
-const sentSavedAnswers = new Map(); // Для отслеживания отправленных savedAnswer
+const sentSavedAnswers = new Map(); // Track sent saved answers
 
 const adminUsername = 'admin';
 const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC';
 
-// Экранирование строк для Supabase
-function escapeSupabaseString(str) {
+// Enhanced string escaping for Supabase
+const escapeSupabaseString = (str) => {
     if (!str) return '';
-    return str.replace(/"/g, '""').replace(/\n/g, '\\n').replace(/;/g, '\\;');
-}
+    return str
+        .replace(/"/g, '""') // Escape quotes
+        .replace(/\n/g, '\\n') // Escape newlines
+        .replace(/;/g, '\\;') // Escape semicolons
+        .replace(/\+/g, '\\+') // Escape plus signs
+        .replace(/,/g, '\\,') // Escape commas
+        .replace(/\\/g, '\\\\'); // Escape backslashes
+};
 
 async function logToSupabase(clientId, questionData, assistantAnswer = null) {
     try {
         const examData = activeExams.get(clientId);
 
-        // Экранируем текст вопроса и изображения
+        // Escape question text and image
         const escapedQuestionText = escapeSupabaseString(questionData.question);
         const escapedQuestionImg = escapeSupabaseString(questionData.questionImg);
 
-        // Проверяем существование вопроса
+        // Check for existing question
         const { data: existingData, error: fetchError } = await supabaseClient
             .from('exam_questions')
             .select('id, assistant_answer')
-            .or(`question_text.eq.${escapedQuestionText},question_img.eq.${escapedQuestionImg}`)
-            .select();
+            .or(`question_text.eq.${escapedQuestionText},question_img.eq.${escapedQuestionImg}`);
 
         if (fetchError) {
             console.error('index.js: Supabase fetch error:', fetchError);
             return;
         }
 
-        // Если вопрос существует, обновляем ответы
+        // Update existing question with new answer
         if (existingData.length > 0 && assistantAnswer) {
             let currentAnswers = existingData[0].assistant_answer || [];
             const answerExists = currentAnswers.some(ans =>
@@ -87,7 +92,7 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             return;
         }
 
-        // Если вопроса нет, создаём новый
+        // Insert new question
         const upsertData = {
             question_text: questionData.question,
             question_img: questionData.questionImg || null,
@@ -251,7 +256,7 @@ wss.on('connection', ws => {
                     answers: parsedMessage.answers,
                     answersList: [],
                 };
-                const existingQuestion = examData.questions.find(q => q.question === parsedMessage.question);
+                const existingQuestion = examData.questions.find(q => q.question?.trim().toLowerCase() === parsedMessage.question?.trim().toLowerCase());
                 if (!existingQuestion) {
                     examData.questions.push(questionData);
                     await logToSupabase(clientId, questionData);
@@ -358,6 +363,7 @@ wss.on('connection', ws => {
                             });
                             wss.clients.forEach(client => {
                                 if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                                    console.log('index.js: Broadcasting processedAnswer to exam client:', client.clientId);
                                     client.send(JSON.stringify({
                                         type: 'processedAnswer',
                                         qIndex: parsedMessage.qIndex,

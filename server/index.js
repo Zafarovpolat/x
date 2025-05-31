@@ -139,38 +139,37 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
 }
 
 async function checkAndUpsertQuestion(questionData) {
-    try {
-        // Убедимся, что передаем только существующие колонки
-        const supabaseData = {
-            question_text: questionData.question,
-            question_img: questionData.questionImg,
-            answers: questionData.answers,
-            exam_info: questionData.exam_info,
-            timer: questionData.timer,
-            updated_at: questionData.updated_at,
-            q_index: questionData.qIndex, // Используем имя колонки из Supabase
-            text_hash: questionData.text_hash
-        };
+  try {
+    const supabaseData = {
+      question_text: questionData.question,
+      question_img: questionData.questionImg,
+      answers: questionData.answers,
+      exam_info: questionData.exam_info,
+      timer: questionData.timer,
+      updated_at: new Date().toISOString(),
+      q_index: questionData.qIndex, // Используем точное имя колонки из БД
+      text_hash: questionData.textHash
+    };
 
-        // Удаляем undefined поля
-        Object.keys(supabaseData).forEach(key => {
-            if (supabaseData[key] === undefined) {
-                delete supabaseData[key];
-            }
-        });
+    // Удаляем undefined значения
+    Object.keys(supabaseData).forEach(key => {
+      if (supabaseData[key] === undefined) {
+        delete supabaseData[key];
+      }
+    });
 
-        const { data, error } = await supabaseClient
-            .from('exam_questions')
-            .upsert(supabaseData)
-            .select()
-            .single();
+    const { data, error } = await supabaseClient
+      .from('exam_questions')
+      .upsert(supabaseData, { onConflict: 'text_hash' })
+      .select()
+      .single();
 
-        if (error) throw error;
-        return data.id;
-    } catch (error) {
-        console.error('Error in checkAndUpsertQuestion:', error);
-        return null;
-    }
+    if (error) throw error;
+    return data.id;
+  } catch (error) {
+    console.error('Error in checkAndUpsertQuestion:', error);
+    return null;
+  }
 }
 
 async function checkSupabaseForAnswers(clientId, questionText, questionImg, qIndex) {

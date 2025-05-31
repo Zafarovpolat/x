@@ -44,32 +44,46 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             updated_at: new Date().toISOString()
         };
 
-        if (assistantAnswer) {
-            // Проверяем, существует ли запись
-            const { data: existingData, error: fetchError } = await supabaseClient
+        // Fetch existing data using the identified question.
+        let existingData = null;
+        if (questionData.question) {
+            const { data, error } = await supabaseClient
                 .from('exam_questions')
                 .select('assistant_answer')
                 .eq('question_text', questionData.question)
                 .single();
-
-            if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 - запись не найдена
-                console.error('index.js: Supabase fetch error:', fetchError);
-                return;
+            if (!error || error.code === 'PGRST116') { // PGRST116 means "no rows found"
+                existingData = data;
+            } else {
+                console.error('index.js: Supabase fetch error during assistantAnswer check:', error);
+                // Even if there's an error fetching, we still try to upsert.
             }
+        } else if (questionData.questionImg) {
+            const { data, error } = await supabaseClient
+                .from('exam_questions')
+                .select('assistant_answer')
+                .eq('question_img', questionData.questionImg)
+                .single();
+            if (!error || error.code === 'PGRST116') {
+                existingData = data;
+            } else {
+                console.error('index.js: Supabase fetch error during assistantAnswer check (img):', error);
+            }
+        }
 
+        if (assistantAnswer) {
             let currentAnswers = existingData?.assistant_answer || [];
-            // Удаляем существующий ответ от того же пользователя, если он есть
+            // Filter out any existing answer by the same user to prevent duplicates from the same user
             currentAnswers = currentAnswers.filter(ans => ans.answeredBy !== assistantAnswer.answeredBy);
-            // Добавляем новый ответ
+            // Add the new answer
             currentAnswers.push(assistantAnswer);
-
             upsertData.assistant_answer = currentAnswers;
         }
 
         const { data, error } = await supabaseClient
             .from('exam_questions')
             .upsert(upsertData, {
-                onConflict: ['question_text']
+                onConflict: ['question_text'] // Keep question_text for now as primary identifier
             })
             .select();
 

@@ -45,7 +45,7 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
         };
 
         if (assistantAnswer) {
-            // Получаем текущие ответы из Supabase
+            // Проверяем, существует ли запись
             const { data: existingData, error: fetchError } = await supabaseClient
                 .from('exam_questions')
                 .select('assistant_answer')
@@ -62,6 +62,7 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             currentAnswers = currentAnswers.filter(ans => ans.answeredBy !== assistantAnswer.answeredBy);
             // Добавляем новый ответ
             currentAnswers.push(assistantAnswer);
+
             upsertData.assistant_answer = currentAnswers;
         }
 
@@ -69,7 +70,8 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             .from('exam_questions')
             .upsert(upsertData, {
                 onConflict: ['question_text']
-            });
+            })
+            .select();
 
         if (error) {
             console.error('index.js: Supabase upsert error:', error);
@@ -104,7 +106,7 @@ async function checkSupabaseForAnswers(clientId, questionText, questionImg, qInd
                         console.log('index.js: Sending saved answer to helper:', clientId, { qIndex, varIndex });
                         targetClient.ws.send(JSON.stringify({
                             type: 'savedAnswer',
-                            qIndex,
+                            qIndex: qIndex,
                             varIndex,
                             question: questionText,
                             answer: answer.answer,

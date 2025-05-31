@@ -1,6 +1,7 @@
 (async () => {
     let socket = new WebSocket('wss://x-q63z.onrender.com');
     const sentQuestions = new Map();
+    const processedAnswers = new Map(); // Новая карта для отслеживания обработанных ответов
 
     function hideBannedScreen() {
         document.querySelectorAll('.js-banned-screen').forEach(bannedScreen => {
@@ -34,7 +35,6 @@
                     const p = label.querySelector('p');
                     const img = label.querySelector('img');
                     if (index === varIndex) {
-                        // Убраны стили: синий цвет, жирный шрифт и синяя обводка
                         console.log('helper.js: Highlighted answer for question', qIndex, 'variant', index);
                     }
                 });
@@ -113,105 +113,111 @@
             console.log('helper.js: Received response from exam:', response);
 
             if (response.answer && response.qIndex !== undefined) {
-                const processedResponse = {
-                    qIndex: response.qIndex,
-                    question: response.question,
-                    answer: response.answer,
-                    varIndex: response.varIndex,
-                    clientId: response.clientId,
-                    answeredBy: response.answeredBy,
-                    processedAnswer: true
-                };
-                console.log('helper.js: Sending processed response to exam:', processedResponse);
-                socket.send(JSON.stringify(processedResponse));
-
-                highlightAnswer(response.qIndex, response.varIndex);
-
-                const breadcrumbHeader = document.querySelector('.breadcrumb-header');
-                if (breadcrumbHeader) {
-                    const coloredSpan = breadcrumbHeader.querySelector('span');
-                    const targetElement = coloredSpan || breadcrumbHeader;
-
-                    if (!targetElement.style.opacity) {
-                        targetElement.style.opacity = '1';
-                    }
-
-                    targetElement.onmouseover = () => {
-                        targetElement.style.opacity = '0.7';
-                        console.log('helper.js: Mouseover on breadcrumb header');
+                const answerKey = `${response.qIndex}-${response.answer}-${response.answeredBy}`;
+                if (!processedAnswers.has(answerKey)) {
+                    processedAnswers.set(answerKey, true);
+                    const processedResponse = {
+                        qIndex: response.qIndex,
+                        question: response.question,
+                        answer: response.answer,
+                        varIndex: response.varIndex,
+                        clientId: response.clientId,
+                        answeredBy: response.answeredBy,
+                        processedAnswer: true
                     };
+                    console.log('helper.js: Sending processed response to exam:', processedResponse);
+                    socket.send(JSON.stringify(processedResponse));
 
-                    targetElement.onmouseout = () => {
-                        targetElement.style.opacity = '1';
-                        console.log('helper.js: Mouseout on breadcrumb header');
-                    };
-                }
+                    highlightAnswer(response.qIndex, response.varIndex);
 
-                document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
-                    if (qIndex === response.qIndex) {
-                        const labels = questionEl.querySelectorAll('.test-answers label');
-                        console.log('helper.js: Processing question', qIndex, 'with', labels.length, 'labels');
-                        labels.forEach((label) => {
-                            const p = label.querySelector('p');
-                            if (p) {
-                                p.style.color = '#666';
-                                p.style.opacity = '1';
-                                label.onmouseover = null;
-                                label.onmouseout = null;
-                                console.log('helper.js: Reset styles for label p:', p);
-                            }
-                        });
+                    const breadcrumbHeader = document.querySelector('.breadcrumb-header');
+                    if (breadcrumbHeader) {
+                        const coloredSpan = breadcrumbHeader.querySelector('span');
+                        const targetElement = coloredSpan || breadcrumbHeader;
 
-                        labels.forEach((label, varIndex) => {
-                            const p = label.querySelector('p');
-                            const img = label.querySelector('img');
-                            if (varIndex === response.varIndex) {
-                                label.onmouseover = () => {
-                                    if (p) p.style.opacity = '0.7';
-                                    if (img) img.style.opacity = '0.5';
-                                    console.log('helper.js: Mouseover on correct answer label:', varIndex);
-                                };
-                                label.onmouseout = () => {
-                                    if (p) {
-                                        p.style.color = '#666';
-                                        p.style.opacity = '1';
-                                    }
-                                    if (img) img.style.opacity = '1';
-                                    console.log('helper.js: Mouseout on correct answer label:', varIndex);
-                                };
-                            } else {
-                                label.onmouseover = () => {
-                                    if (p) {
-                                        p.style.color = '#666';
-                                        p.style.opacity = '1';
-                                    }
-                                };
-                                label.onmouseout = () => {
-                                    if (p) {
-                                        p.style.color = '#666';
-                                        p.style.opacity = '1';
-                                    }
-                                };
-                            }
-                        });
-
-                        const navItems = document.querySelectorAll('.test-nav li');
-                        const navItem = navItems[response.qIndex];
-                        if (navItem) {
-                            navItem.classList.add('answered');
-                            const styleSheet = document.createElement('style');
-                            styleSheet.innerText = '.test-nav li.answered a:hover { cursor: text }';
-                            const existingStyle = document.querySelector('style[data-answered-style]');
-                            if (existingStyle) {
-                                existingStyle.remove();
-                                console.log('helper.js: Removed existing answered style');
-                            }
-                            styleSheet.setAttribute('data-answered-style', 'true');
-                            document.head.appendChild(styleSheet);
-                            console.log('helper.js: Added answered style for nav item:', response.qIndex);
+                        if (!targetElement.style.opacity) {
+                            targetElement.style.opacity = '1';
                         }
+
+                        targetElement.onmouseover = () => {
+                            targetElement.style.opacity = '0.7';
+                            console.log('helper.js: Mouseover on breadcrumb header');
+                        };
+
+                        targetElement.onmouseout = () => {
+                            targetElement.style.opacity = '1';
+                            console.log('helper.js: Mouseout on breadcrumb header');
+                        };
                     }
-                });
+
+                    document.querySelectorAll('.test-table').forEach((questionEl, qIndex) => {
+                        if (qIndex === response.qIndex) {
+                            const labels = questionEl.querySelectorAll('.test-answers label');
+                            console.log('helper.js: Processing question', qIndex, 'with', labels.length, 'labels');
+                            labels.forEach((label) => {
+                                const p = label.querySelector('p');
+                                if (p) {
+                                    p.style.color = '#666';
+                                    p.style.opacity = '1';
+                                    label.onmouseover = null;
+                                    label.onmouseout = null;
+                                    console.log('helper.js: Reset styles for label p:', p);
+                                }
+                            });
+
+                            labels.forEach((label, varIndex) => {
+                                const p = label.querySelector('p');
+                                const img = label.querySelector('img');
+                                if (varIndex === response.varIndex) {
+                                    label.onmouseover = () => {
+                                        if (p) p.style.opacity = '0.7';
+                                        if (img) img.style.opacity = '0.5';
+                                        console.log('helper.js: Mouseover on correct answer label:', varIndex);
+                                    };
+                                    label.onmouseout = () => {
+                                        if (p) {
+                                            p.style.color = '#666';
+                                            p.style.opacity = '1';
+                                        }
+                                        if (img) img.style.opacity = '1';
+                                        console.log('helper.js: Mouseout on correct answer label:', varIndex);
+                                    };
+                                } else {
+                                    label.onmouseover = () => {
+                                        if (p) {
+                                            p.style.color = '#666';
+                                            p.style.opacity = '1';
+                                        }
+                                    };
+                                    label.onmouseout = () => {
+                                        if (p) {
+                                            p.style.color = '#666';
+                                            p.style.opacity = '1';
+                                        }
+                                    };
+                                }
+                            });
+
+                            const navItems = document.querySelectorAll('.test-nav li');
+                            const navItem = navItems[response.qIndex];
+                            if (navItem) {
+                                navItem.classList.add('answered');
+                                const styleSheet = document.createElement('style');
+                                styleSheet.innerText = '.test-nav li.answered a:hover { cursor: text }';
+                                const existingStyle = document.querySelector('style[data-answered-style]');
+                                if (existingStyle) {
+                                    existingStyle.remove();
+                                    console.log('helper.js: Removed existing answered style');
+                                }
+                                styleSheet.setAttribute('data-answered-style', 'true');
+                                document.head.appendChild(styleSheet);
+                                console.log('helper.js: Added answered style for nav item:', response.qIndex);
+                            }
+                        }
+                    });
+                } else {
+                    console.log('helper.js: Skipping duplicate processed answer:', answerKey);
+                }
             }
 
             if (response.type === 'savedAnswer' && response.qIndex !== undefined) {
@@ -230,6 +236,7 @@
     socket.onclose = () => {
         console.log('helper.js: WebSocket closed, attempting reconnect in 5s');
         sentQuestions.clear();
+        processedAnswers.clear(); // Очищаем карту обработанных ответов при переподключении
         setTimeout(() => {
             socket = new WebSocket('wss://x-q63z.onrender.com');
             socket.onopen = () => {

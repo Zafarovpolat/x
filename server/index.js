@@ -13,10 +13,9 @@ console.log('index.js: Supabase client initialized');
 
 // Настраиваем CORS
 app.use(cors({
-    origin: '*', // TODO: Заменить на конкретные домены для безопасности
+    origin: '*', // TODO: Заменить на конкретные домены
 }));
 
-// Раздача статических файлов
 app.use(express.static(path.join(__dirname, '../client')));
 
 const server = app.listen(process.env.PORT || 8080, () => {
@@ -24,35 +23,44 @@ const server = app.listen(process.env.PORT || 8080, () => {
 });
 const wss = new WebSocket.Server({ server });
 
-// Хранилище активных клиентов и их данных
 const clients = new Map();
 const activeExams = new Map();
+const sentSavedAnswers = new Map(); // Для отслеживания отправленных savedAnswer
 
-// Предопределенные учетные данные
 const adminUsername = 'admin';
 const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC';
+
+// Экранирование строк для Supabase
+function escapeSupabaseString(str) {
+    if (!str) return '';
+    return str.replace(/"/g, '""').replace(/\n/g, '\\n').replace(/;/g, '\\;');
+}
 
 async function logToSupabase(clientId, questionData, assistantAnswer = null) {
     try {
         const examData = activeExams.get(clientId);
 
-        // Проверяем, существует ли вопрос
+        // Экранируем текст вопроса и изображения
+        const escapedQuestionText = escapeSupabaseString(questionData.question);
+        const escapedQuestionImg = escapeSupabaseString(questionData.questionImg);
+
+        // Проверяем существование вопроса
         const { data: existingData, error: fetchError } = await supabaseClient
             .from('exam_questions')
             .select('id, assistant_answer')
-            .or(`question_text.eq.${questionData.question},question_img.eq.${questionData.questionImg}`)
-            .maybeSingle();
+            .or(`question_text.eq.${escapedQuestionText},question_img.eq.${escapedQuestionImg}`)
+            .select();
 
-        if (fetchError && !fetchError.message.includes('No rows found')) {
+        if (fetchError) {
             console.error('index.js: Supabase fetch error:', fetchError);
             return;
         }
 
-        // Если вопрос существует и есть assistantAnswer, обновляем ответы, избегая дубликатов
-        if (existingData && assistantAnswer) {
-            let currentAnswers = existingData.assistant_answer || [];
-            const answerExists = currentAnswers.some(ans => 
-                ans.answeredBy === assistantAnswer.answeredBy && 
+        // Если вопрос существует, обновляем ответы
+        if (existingData.length > 0 && assistantAnswer) {
+            let currentAnswers = existingData[0].assistant_answer || [];
+            const answerExists = currentAnswers.some(ans =>
+                ans.answeredBy === assistantAnswer.answeredBy &&
                 ans.answer === assistantAnswer.answer
             );
             if (!answerExists) {
@@ -65,7 +73,7 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
                 const { data, error } = await supabaseClient
                     .from('exam_questions')
                     .update({ assistant_answer: currentAnswers })
-                    .eq('id', existingData.id)
+                    .eq('id', existingData[0].id)
                     .select();
 
                 if (error) {
@@ -79,7 +87,7 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             return;
         }
 
-        // Если вопроса нет, выполняем upsert
+        // Если вопроса нет, создаём новый
         const upsertData = {
             question_text: questionData.question,
             question_img: questionData.questionImg || null,
@@ -116,10 +124,13 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
 
 async function checkSupabaseForAnswers(clientId, questionText, questionImg, qIndex) {
     try {
+        const escapedQuestionText = escapeSupabaseString(questionText);
+        const escapedQuestionImg = escapeSupabaseString(questionImg);
+
         const { data, error } = await supabaseClient
             .from('exam_questions')
             .select('assistant_answer, answers')
-            .eq('question_text', questionText)
+            .eq('question_text', escapedQuestionText)
             .not('assistant_answer', 'is', null);
 
         if (error) {
@@ -134,15 +145,21 @@ async function checkSupabaseForAnswers(clientId, questionText, questionImg, qInd
                 data[0].assistant_answer.forEach(answer => {
                     const varIndex = data[0].answers.findIndex(ans => ans.text === answer.answer);
                     if (varIndex !== -1) {
-                        console.log('index.js: Sending saved answer to helper:', clientId, { qIndex, varIndex });
-                        targetClient.ws.send(JSON.stringify({
-                            type: 'savedAnswer',
-                            qIndex: qIndex,
-                            varIndex,
-                            question: questionText,
-                            answer: answer.answer,
-                            answeredBy: answer.answeredBy
-                        }));
+                        const answerKey = `${clientId}-${qIndex}-${answer.answeredBy}-${answer.answer}`;
+                        if (!sentSavedAnswers.has(answerKey)) {
+                            sentSavedAnswers.set(answerKey, true);
+                            console.log('index.js: Sending saved answer to helper:', clientId, { qIndex, varIndex });
+                            targetClient.ws.send(JSON.stringify({
+                                type: 'savedAnswer',
+                                qIndex: qIndex,
+                                varIndex,
+                                question: questionText,
+                                answer: answer.answer,
+                                answeredBy: answer.answeredBy
+                            }));
+                        } else {
+                            console.log('index.js: Skipped duplicate saved answer:', answerKey);
+                        }
                     }
                 });
             }
@@ -162,7 +179,6 @@ wss.on('connection', ws => {
     clients.set(clientId, { ws, role: null, lastActive: Date.now() });
     ws.clientId = clientId;
 
-    // Отправка пинга каждые 30 секунд для проверки активности
     const pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
             ws.ping();
@@ -180,7 +196,6 @@ wss.on('connection', ws => {
         try {
             const parsedMessage = JSON.parse(message);
 
-            // Обработка логина
             if (parsedMessage.type === 'login') {
                 const { username, password } = parsedMessage;
                 if (username === adminUsername) {
@@ -198,7 +213,6 @@ wss.on('connection', ws => {
                 return;
             }
 
-            // Регистрация роли
             if (parsedMessage.role) {
                 clients.get(clientId).role = parsedMessage.role;
                 console.log(`index.js: Client ${clientId} registered as ${parsedMessage.role}`);
@@ -222,7 +236,6 @@ wss.on('connection', ws => {
                 return;
             }
 
-            // Обработка вопроса от helper
             if ((parsedMessage.question || parsedMessage.questionImg) && clients.get(clientId).role === 'helper') {
                 parsedMessage.clientId = clientId;
                 console.log('index.js: Processing question from helper:', parsedMessage);
@@ -257,7 +270,6 @@ wss.on('connection', ws => {
                 });
             }
 
-            // Ответ от exam отправляем конкретному helper
             if (parsedMessage.answer && clients.get(clientId).role === 'exam') {
                 console.log('index.js: Processing answer from exam:', parsedMessage);
                 const targetClient = clients.get(parsedMessage.clientId);
@@ -270,8 +282,8 @@ wss.on('connection', ws => {
                     const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
                     if (question) {
                         if (!question.answersList) question.answersList = [];
-                        const existingAnswer = question.answersList.find(a => 
-                            a.answeredBy === parsedMessage.answeredBy && 
+                        const existingAnswer = question.answersList.find(a =>
+                            a.answeredBy === parsedMessage.answeredBy &&
                             a.answer === parsedMessage.answer
                         );
                         if (!existingAnswer) {
@@ -318,7 +330,6 @@ wss.on('connection', ws => {
                 }
             }
 
-            // Обработанный ответ от helper отправляем всем exam
             if (parsedMessage.processedAnswer && clients.get(clientId).role === 'helper') {
                 console.log('index.js: Broadcasting processedAnswer from helper:', parsedMessage);
                 if (activeExams.has(parsedMessage.clientId)) {
@@ -326,8 +337,8 @@ wss.on('connection', ws => {
                     const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
                     if (question) {
                         if (!question.answersList) question.answersList = [];
-                        const existingAnswer = question.answersList.find(a => 
-                            a.answeredBy === parsedMessage.answeredBy && 
+                        const existingAnswer = question.answersList.find(a =>
+                            a.answeredBy === parsedMessage.answeredBy &&
                             a.answer === parsedMessage.answer
                         );
                         if (!existingAnswer) {
@@ -365,7 +376,6 @@ wss.on('connection', ws => {
                 }
             }
 
-            // Обработка обновления таймера от helper
             if (parsedMessage.type === 'timerUpdate' && clients.get(clientId).role === 'helper') {
                 console.log('index.js: Processing timerUpdate:', parsedMessage);
                 if (activeExams.has(clientId)) {
@@ -405,7 +415,6 @@ wss.on('connection', ws => {
         clients.delete(clientId);
     });
 
-    // Проверка неактивных клиентов каждые 60 секунд
     setInterval(() => {
         clients.forEach((client, id) => {
             const inactiveTime = (Date.now() - client.lastActive) / 1000;

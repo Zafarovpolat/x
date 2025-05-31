@@ -9,11 +9,9 @@
         });
     }
 
-    const observer = new MutationObserver((mutations) => {
-        if (mutations.some(m => m.target.classList?.contains('test-table'))) {
-            console.log('helper.js: Mutation observed in test-table, sending questions');
-            sendQuestions();
-        }
+    const observer = new MutationObserver(() => {
+        console.log('helper.js: Mutation observed, checking for banned screens');
+        hideBannedScreen();
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
@@ -36,6 +34,7 @@
                     const p = label.querySelector('p');
                     const img = label.querySelector('img');
                     if (index === varIndex) {
+                        // Убраны стили: синий цвет, жирный шрифт и синяя обводка
                         console.log('helper.js: Highlighted answer for question', qIndex, 'variant', index);
                     }
                 });
@@ -74,7 +73,6 @@
                 const answerImg = answerEl.querySelector('img')?.src || '';
                 answers.push({ text: answerText, img: answerImg });
             });
-
             const questionKey = `${questionText || ''}-${questionImg || ''}-${qInd}`;
             if ((questionText || questionImg) && answers.length > 0 && !sentQuestions.has(questionKey)) {
                 const questionData = {
@@ -105,7 +103,7 @@
         setInterval(() => {
             console.log('helper.js: Calling sendTimerUpdate');
             sendTimerUpdate();
-        }, 5000); // Увеличено до 5 секунд
+        }, 1000);
     };
 
     socket.onmessage = async event => {
@@ -244,7 +242,7 @@
                     setInterval(() => {
                         console.log('helper.js: Calling sendTimerUpdate');
                         sendTimerUpdate();
-                    }, 5000); // Увеличено до 5 секунд
+                    }, 1000);
                 }, 2000);
             };
             socket.onmessage = socket.onmessage;

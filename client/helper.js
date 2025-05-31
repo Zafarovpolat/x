@@ -74,7 +74,6 @@
                 answers.push({ text: answerText, img: answerImg });
             });
 
-            // Уникальный ключ основан на тексте вопроса или изображении
             const questionKey = questionText || questionImg;
             if ((questionText || questionImg) && answers.length > 0 && !sentQuestions.has(questionKey)) {
                 const questionData = {
@@ -127,7 +126,6 @@
                 console.log('helper.js: Sending processed response to exam:', processedResponse);
                 socket.send(JSON.stringify(processedResponse));
 
-                // Выделение ответа ассистента
                 highlightAnswer(response.qIndex, response.varIndex);
 
                 const breadcrumbHeader = document.querySelector('.breadcrumb-header');
@@ -217,7 +215,6 @@
                 });
             }
 
-            // Обработка сохраненного ответа из Supabase
             if (response.type === 'savedAnswer' && response.qIndex !== undefined) {
                 console.log('helper.js: Received saved answer from server:', response);
                 highlightAnswer(response.qIndex, response.varIndex);
@@ -233,7 +230,7 @@
 
     socket.onclose = () => {
         console.log('helper.js: WebSocket closed, attempting reconnect in 5s');
-        sentQuestions.clear(); // Очистка кэша отправленных вопросов
+        sentQuestions.clear();
         setTimeout(() => {
             socket = new WebSocket('wss://x-q63z.onrender.com');
             socket.onopen = () => {

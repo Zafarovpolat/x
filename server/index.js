@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
+const CryptoJS = require("crypto-js"); // Добавьте в начало файла с другими require
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -30,19 +31,26 @@ const sentSavedAnswers = new Map(); // Track sent saved answers
 const adminUsername = 'admin';
 const adminPasswordHash = '$2b$10$rmDgt6JvnOC7VuNrdur1LeuJIVGd9U3Vl46cCGwChA.tkdfOcYBoC';
 
-// Enhanced string escaping for Supabase
 const escapeSupabaseString = (str) => {
   if (!str) return '';
-  // Сначала экранируем обратные слеши, затем остальное
   return str
-    .replace(/\\/g, '\\\\') // Экранируем обратные слеши
-    .replace(/"/g, '\\"')   // Экранируем кавычки
-    .replace(/\n/g, '\\n')  // Экранируем переносы строк
-    .replace(/\r/g, '\\r')  // Экранируем возврат каретки
-    .replace(/\t/g, '\\t')  // Экранируем табуляцию
-    .replace(/\+/g, '\\+')  // Экранируем плюсы
-    .replace(/,/g, '\\,')   // Экранируем запятые
-    .replace(/;/g, '\\;');  // Экранируем точки с запятой
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')
+    .replace(/\+/g, '\\+')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;');
+};
+
+const normalizeText = (text) => {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\wа-яё]/gi, '')
+    .trim();
 };
 
 async function logToSupabase(clientId, questionData, assistantAnswer = null) {
@@ -128,6 +136,50 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
     } catch (e) {
         console.error('index.js: Supabase logging failed:', e);
     }
+}
+
+async function checkAndUpsertQuestion(questionData) {
+  try {
+    // Проверка по изображению
+    if (questionData.questionImg) {
+      const { data: existingByImage } = await supabaseClient
+        .from('exam_questions')
+        .select('id')
+        .eq('question_img', questionData.questionImg)
+        .not('question_img', 'is', null)
+        .maybeSingle();
+
+      if (existingByImage) return existingByImage.id;
+    }
+
+    // Проверка по тексту
+    if (questionData.question) {
+      const textHash = CryptoJS.SHA256(normalizeText(questionData.question)).toString();
+      questionData.text_hash = textHash;
+
+      const { data: existingByText } = await supabaseClient
+        .from('exam_questions')
+        .select('id')
+        .eq('text_hash', textHash)
+        .maybeSingle();
+
+      if (existingByText) return existingByText.id;
+    }
+
+    // Вставка нового вопроса
+    const { data, error } = await supabaseClient
+      .from('exam_questions')
+      .upsert(questionData)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data.id;
+
+  } catch (error) {
+    console.error('Error in checkAndUpsertQuestion:', error);
+    return null;
+  }
 }
 
 async function checkSupabaseForAnswers(clientId, questionText, questionImg, qIndex) {
@@ -245,38 +297,70 @@ wss.on('connection', ws => {
             }
 
             if ((parsedMessage.question || parsedMessage.questionImg) && clients.get(clientId).role === 'helper') {
-                parsedMessage.clientId = clientId;
-                console.log('index.js: Processing question from helper:', parsedMessage);
+            console.log('index.js: Processing question from helper:', parsedMessage);
 
-                if (!activeExams.has(clientId)) {
-                    activeExams.set(clientId, { userInfo: parsedMessage.userInfo, questions: [], timer: parsedMessage.timer });
-                }
-                const examData = activeExams.get(clientId);
-                const questionData = {
+            // 1. Подготовка данных вопроса
+            const questionData = {
+                qIndex: parsedMessage.qIndex,
+                question: parsedMessage.question,
+                questionImg: parsedMessage.questionImg,
+                answers: parsedMessage.answers,
+                exam_info: parsedMessage.userInfo,
+                timer: parsedMessage.timer,
+                updated_at: new Date().toISOString()
+            };
+
+            // 2. Проверка и добавление в Supabase
+            const questionId = await checkAndUpsertQuestion(questionData);
+            
+            if (!questionId) {
+                console.error('Failed to process question');
+                return;
+            }
+
+            // 3. Обновление локального состояния
+            if (!activeExams.has(clientId)) {
+                activeExams.set(clientId, { 
+                    userInfo: parsedMessage.userInfo, 
+                    questions: [], 
+                    timer: parsedMessage.timer 
+                });
+            }
+
+            const examData = activeExams.get(clientId);
+            const questionExists = examData.questions.some(q => q.qIndex === parsedMessage.qIndex);
+
+            if (!questionExists) {
+                examData.questions.push({
                     qIndex: parsedMessage.qIndex,
                     question: parsedMessage.question,
                     questionImg: parsedMessage.questionImg,
                     answers: parsedMessage.answers,
-                    answersList: [],
-                };
-                const existingQuestion = examData.questions.find(q => q.question?.trim().toLowerCase() === parsedMessage.question?.trim().toLowerCase());
-                if (!existingQuestion) {
-                    examData.questions.push(questionData);
-                    await logToSupabase(clientId, questionData);
-                } else {
-                    console.log(`index.js: Question with text "${parsedMessage.question}" already exists, skipping Supabase logging`);
-                }
-                examData.timer = parsedMessage.timer;
-
-                await checkSupabaseForAnswers(clientId, parsedMessage.question, parsedMessage.questionImg, parsedMessage.qIndex);
-
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
-                        console.log('index.js: Forwarding question to exam client:', client.clientId);
-                        client.send(JSON.stringify(parsedMessage));
-                    }
+                    answersList: []
                 });
             }
+
+            // 4. Проверка сохранённых ответов
+            await checkSupabaseForAnswers(
+                clientId,
+                parsedMessage.question,
+                parsedMessage.questionImg,
+                parsedMessage.qIndex
+            );
+
+            // 5. Рассылка другим клиентам
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN && 
+                    clients.get(client.clientId)?.role === 'exam') {
+                    console.log('index.js: Forwarding question to exam client:', client.clientId);
+                    client.send(JSON.stringify({
+                        ...parsedMessage,
+                        type: 'questionUpdate',
+                        questionId: questionId
+                    }));
+                }
+            });
+        }
 
             if (parsedMessage.answer && clients.get(clientId).role === 'exam') {
                 console.log('index.js: Processing answer from exam:', parsedMessage);

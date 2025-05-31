@@ -34,12 +34,8 @@
                     const p = label.querySelector('p');
                     const img = label.querySelector('img');
                     if (index === varIndex) {
-                        if (p) {
-                            p.style.color = '#00f';
-                            p.style.fontWeight = 'bold';
-                        }
-                        if (img) img.style.border = '2px solid #00f';
-                        console.log('helper.js: Highlighted answer for question', qIndex, 'variant', varIndex);
+                        // Убраны стили: синий цвет, жирный шрифт и синяя обводка
+                        console.log('helper.js: Highlighted answer for question', qIndex, 'variant', index);
                     }
                 });
             }

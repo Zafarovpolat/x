@@ -39,7 +39,7 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
         // Проверяем, существует ли вопрос
         const { data: existingData, error: fetchError } = await supabaseClient
             .from('exam_questions')
-            .select('id')
+            .select('id, assistant_answer')
             .or(`question_text.eq.${questionData.question},question_img.eq.${questionData.questionImg}`)
             .maybeSingle();
 
@@ -48,26 +48,33 @@ async function logToSupabase(clientId, questionData, assistantAnswer = null) {
             return;
         }
 
-        // Если вопрос уже существует, обновляем только assistant_answer
+        // Если вопрос существует и есть assistantAnswer, обновляем ответы, избегая дубликатов
         if (existingData && assistantAnswer) {
             let currentAnswers = existingData.assistant_answer || [];
-            currentAnswers = currentAnswers.filter(ans => ans.answeredBy !== assistantAnswer.answeredBy);
-            currentAnswers.push({
-                answer: assistantAnswer.answer,
-                varIndex: assistantAnswer.varIndex,
-                answeredBy: assistantAnswer.answeredBy
-            });
+            const answerExists = currentAnswers.some(ans => 
+                ans.answeredBy === assistantAnswer.answeredBy && 
+                ans.answer === assistantAnswer.answer
+            );
+            if (!answerExists) {
+                currentAnswers.push({
+                    answer: assistantAnswer.answer,
+                    varIndex: assistantAnswer.varIndex,
+                    answeredBy: assistantAnswer.answeredBy
+                });
 
-            const { data, error } = await supabaseClient
-                .from('exam_questions')
-                .update({ assistant_answer: currentAnswers })
-                .eq('id', existingData.id)
-                .select();
+                const { data, error } = await supabaseClient
+                    .from('exam_questions')
+                    .update({ assistant_answer: currentAnswers })
+                    .eq('id', existingData.id)
+                    .select();
 
-            if (error) {
-                console.error('index.js: Supabase update error:', error);
+                if (error) {
+                    console.error('index.js: Supabase update error:', error);
+                } else {
+                    console.log('index.js: Updated assistant_answer in Supabase:', data);
+                }
             } else {
-                console.log('index.js: Updated assistant_answer in Supabase:', data);
+                console.log('index.js: Duplicate assistant answer skipped:', assistantAnswer);
             }
             return;
         }
@@ -263,49 +270,52 @@ wss.on('connection', ws => {
                     const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
                     if (question) {
                         if (!question.answersList) question.answersList = [];
-                        const existingAnswer = question.answersList.find(a => a.answeredBy === parsedMessage.answeredBy);
-                        if (existingAnswer) {
-                            existingAnswer.answer = parsedMessage.answer;
-                        } else {
+                        const existingAnswer = question.answersList.find(a => 
+                            a.answeredBy === parsedMessage.answeredBy && 
+                            a.answer === parsedMessage.answer
+                        );
+                        if (!existingAnswer) {
                             question.answersList.push({
                                 answer: parsedMessage.answer,
                                 answeredBy: parsedMessage.answeredBy
                             });
+                            await logToSupabase(parsedMessage.clientId, {
+                                qIndex: parsedMessage.qIndex,
+                                question: parsedMessage.question,
+                                questionImg: null,
+                                answers: question ? question.answers : [],
+                            }, {
+                                answer: parsedMessage.answer,
+                                varIndex: parsedMessage.varIndex,
+                                answeredBy: parsedMessage.answeredBy
+                            });
+                        } else {
+                            console.log('index.js: Duplicate answer skipped:', parsedMessage);
                         }
                     }
-                    await logToSupabase(parsedMessage.clientId, {
-                        qIndex: parsedMessage.qIndex,
-                        question: parsedMessage.question,
-                        questionImg: null,
-                        answers: question ? question.answers : [],
-                    }, {
-                        answer: parsedMessage.answer,
-                        varIndex: parsedMessage.varIndex,
-                        answeredBy: parsedMessage.answeredBy
+                    wss.clients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                            console.log('index.js: Broadcasting processedAnswer to exam client:', client.clientId, {
+                                type: 'processedAnswer',
+                                qIndex: parsedMessage.qIndex,
+                                question: parsedMessage.question,
+                                answer: parsedMessage.answer,
+                                varIndex: parsedMessage.varIndex,
+                                clientId: parsedMessage.clientId,
+                                answeredBy: parsedMessage.answeredBy
+                            });
+                            client.send(JSON.stringify({
+                                type: 'processedAnswer',
+                                qIndex: parsedMessage.qIndex,
+                                question: parsedMessage.question,
+                                answer: parsedMessage.answer,
+                                varIndex: parsedMessage.varIndex,
+                                clientId: parsedMessage.clientId,
+                                answeredBy: parsedMessage.answeredBy
+                            }));
+                        }
                     });
                 }
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
-                        console.log('index.js: Broadcasting processedAnswer to exam client:', client.clientId, {
-                            type: 'processedAnswer',
-                            qIndex: parsedMessage.qIndex,
-                            question: parsedMessage.question,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex,
-                            clientId: parsedMessage.clientId,
-                            answeredBy: parsedMessage.answeredBy
-                        });
-                        client.send(JSON.stringify({
-                            type: 'processedAnswer',
-                            qIndex: parsedMessage.qIndex,
-                            question: parsedMessage.question,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex,
-                            clientId: parsedMessage.clientId,
-                            answeredBy: parsedMessage.answeredBy
-                        }));
-                    }
-                });
             }
 
             // Обработанный ответ от helper отправляем всем exam
@@ -316,40 +326,43 @@ wss.on('connection', ws => {
                     const question = examData.questions.find(q => q.qIndex === parsedMessage.qIndex);
                     if (question) {
                         if (!question.answersList) question.answersList = [];
-                        const existingAnswer = question.answersList.find(a => a.answeredBy === parsedMessage.answeredBy);
-                        if (existingAnswer) {
-                            existingAnswer.answer = parsedMessage.answer;
-                        } else {
+                        const existingAnswer = question.answersList.find(a => 
+                            a.answeredBy === parsedMessage.answeredBy && 
+                            a.answer === parsedMessage.answer
+                        );
+                        if (!existingAnswer) {
                             question.answersList.push({
                                 answer: parsedMessage.answer,
                                 answeredBy: parsedMessage.answeredBy
                             });
+                            await logToSupabase(parsedMessage.clientId, {
+                                qIndex: parsedMessage.qIndex,
+                                question: parsedMessage.question,
+                                questionImg: null,
+                                answers: question ? question.answers : [],
+                            }, {
+                                answer: parsedMessage.answer,
+                                varIndex: parsedMessage.varIndex,
+                                answeredBy: parsedMessage.answeredBy
+                            });
+                            wss.clients.forEach(client => {
+                                if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
+                                    client.send(JSON.stringify({
+                                        type: 'processedAnswer',
+                                        qIndex: parsedMessage.qIndex,
+                                        question: parsedMessage.question,
+                                        answer: parsedMessage.answer,
+                                        varIndex: parsedMessage.varIndex,
+                                        clientId: parsedMessage.clientId,
+                                        answeredBy: parsedMessage.answeredBy
+                                    }));
+                                }
+                            });
+                        } else {
+                            console.log('index.js: Duplicate processed answer skipped:', parsedMessage);
                         }
                     }
-                    await logToSupabase(parsedMessage.clientId, {
-                        qIndex: parsedMessage.qIndex,
-                        question: parsedMessage.question,
-                        questionImg: null,
-                        answers: question ? question.answers : [],
-                    }, {
-                        answer: parsedMessage.answer,
-                        varIndex: parsedMessage.varIndex,
-                        answeredBy: parsedMessage.answeredBy
-                    });
                 }
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN && clients.get(client.clientId).role === 'exam') {
-                        client.send(JSON.stringify({
-                            type: 'processedAnswer',
-                            qIndex: parsedMessage.qIndex,
-                            question: parsedMessage.question,
-                            answer: parsedMessage.answer,
-                            varIndex: parsedMessage.varIndex,
-                            clientId: parsedMessage.clientId,
-                            answeredBy: parsedMessage.answeredBy
-                        }));
-                    }
-                });
             }
 
             // Обработка обновления таймера от helper

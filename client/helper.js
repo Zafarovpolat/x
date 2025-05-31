@@ -73,7 +73,8 @@
                 const answerImg = answerEl.querySelector('img')?.src || '';
                 answers.push({ text: answerText, img: answerImg });
             });
-            const questionKey = `${questionText || ''}-${questionImg || ''}-${qInd}`;
+
+            const questionKey = questionText || questionImg;
             if ((questionText || questionImg) && answers.length > 0 && !sentQuestions.has(questionKey)) {
                 const questionData = {
                     qIndex: qInd,
